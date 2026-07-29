@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:in_app_purchase/in_app_purchase.dart';
 import '../models/creature.dart';
 import '../models/ocean.dart';
 
@@ -13,14 +15,119 @@ class DataService extends ChangeNotifier {
   int _highScoreDepth = 0;
   bool _isPremiumUnlocked = false;
 
+  static const String premiumProductId = 'vn.io.codego.noisobiensau.premium_lifetime';
+  final InAppPurchase _inAppPurchase = InAppPurchase.instance;
+  StreamSubscription<List<PurchaseDetails>>? _subscription;
+  bool _isPurchaseLoading = false;
+
   List<Creature> get creatures => _creatures;
   List<Ocean> get oceans => _oceans;
   bool get isLoading => _isLoading;
   int get highScoreDepth => _highScoreDepth;
   bool get isPremiumUnlocked => _isPremiumUnlocked;
+  bool get isPurchaseLoading => _isPurchaseLoading;
 
   DataService() {
     loadData();
+    _initializeIap();
+  }
+
+  void _initializeIap() {
+    final Stream<List<PurchaseDetails>> purchaseUpdated = _inAppPurchase.purchaseStream;
+    _subscription = purchaseUpdated.listen(
+      _listenToPurchaseUpdated,
+      onDone: () => _subscription?.cancel(),
+      onError: (error) {
+        if (kDebugMode) {
+          print("IAP Stream Error: $error");
+        }
+        _isPurchaseLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _listenToPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) async {
+    for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
+      if (purchaseDetails.status == PurchaseStatus.pending) {
+        _isPurchaseLoading = true;
+        notifyListeners();
+      } else {
+        if (purchaseDetails.status == PurchaseStatus.error ||
+            purchaseDetails.status == PurchaseStatus.canceled) {
+          _isPurchaseLoading = false;
+          notifyListeners();
+          if (kDebugMode) {
+            print("Purchase failed or canceled: ${purchaseDetails.error}");
+          }
+        } else if (purchaseDetails.status == PurchaseStatus.purchased ||
+            purchaseDetails.status == PurchaseStatus.restored) {
+          await unlockPremium();
+          _isPremiumUnlocked = true;
+          _isPurchaseLoading = false;
+          notifyListeners();
+        }
+        
+        if (purchaseDetails.pendingCompletePurchase) {
+          await _inAppPurchase.completePurchase(purchaseDetails);
+        }
+      }
+    }
+  }
+
+  Future<void> buyPremium() async {
+    try {
+      final bool isAvailable = await _inAppPurchase.isAvailable();
+      if (!isAvailable) {
+        if (kDebugMode) {
+          print("Store is not available");
+        }
+        return;
+      }
+
+      _isPurchaseLoading = true;
+      notifyListeners();
+
+      final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails({premiumProductId});
+      if (response.notFoundIDs.contains(premiumProductId) || response.productDetails.isEmpty) {
+        if (kDebugMode) {
+          print("Product ID not found in store: $premiumProductId");
+        }
+        _isPurchaseLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      final ProductDetails productDetails = response.productDetails.first;
+      final PurchaseParam purchaseParam = PurchaseParam(productDetails: productDetails);
+      await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
+    } catch (e) {
+      if (kDebugMode) {
+        print("Error launching purchase: $e");
+      }
+      _isPurchaseLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> restorePurchases() async {
+    try {
+      _isPurchaseLoading = true;
+      notifyListeners();
+      await _inAppPurchase.restorePurchases();
+    } catch (e) {
+      if (kDebugMode) {
+        print("Error restoring purchases: $e");
+      }
+      _isPurchaseLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadData() async {

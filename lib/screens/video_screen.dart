@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/data_service.dart';
 import '../services/sound_service.dart';
 import '../l10n/app_strings.dart';
@@ -69,6 +70,11 @@ class _VideoScreenState extends State<VideoScreen> {
     ),
   ];
 
+  DataService? _dataService;
+  bool _wasLoading = false;
+  bool _isSuccessDialogShown = false;
+  VoidCallback? _onPurchaseSuccessCallback;
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +83,145 @@ class _VideoScreenState extends State<VideoScreen> {
       Provider.of<SoundService>(context, listen: false).stopAmbient();
       Provider.of<SoundService>(context, listen: false).stopSecondaryAmbient();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dataService?.removeListener(_onDataServiceChanged);
+    _dataService = Provider.of<DataService>(context);
+    _dataService?.addListener(_onDataServiceChanged);
+  }
+
+  @override
+  void dispose() {
+    _dataService?.removeListener(_onDataServiceChanged);
+    super.dispose();
+  }
+
+  void _onDataServiceChanged() {
+    final dataService = _dataService;
+    if (dataService == null) return;
+
+    if (dataService.isPurchaseLoading && !_wasLoading) {
+      _wasLoading = true;
+      _showLoadingDialog();
+    } else if (!dataService.isPurchaseLoading && _wasLoading) {
+      _wasLoading = false;
+      Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
+      
+      if (dataService.isPremiumUnlocked && !_isSuccessDialogShown) {
+        _isSuccessDialogShown = true;
+        _showSuccessDialog();
+      }
+    }
+  }
+
+  void _showLoadingDialog() {
+    final isVi = AppStrings.of(context).languageCode == 'vi';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF071224),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00F0FF)),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  isVi ? 'ĐANG KẾT NỐI CỔNG THANH TOÁN...' : 'CONNECTING SECURE GATEWAY...',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSuccessDialog() {
+    final isVi = AppStrings.of(context).languageCode == 'vi';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF071224),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF00F0FF), width: 1),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Color(0xFF00F0FF),
+                  size: 64,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  isVi ? 'MỞ KHÓA THÀNH CÔNG!' : 'PURCHASE SUCCESSFUL!',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isVi 
+                    ? 'Chúc mừng! Bạn đã sở hữu đặc quyền VIP trọn đời.' 
+                    : 'Congratulations! You now have permanent VIP status.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F0FF),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () {
+                      _isSuccessDialogShown = false;
+                      Navigator.pop(context); // Close success dialog
+                      if (_onPurchaseSuccessCallback != null) {
+                        _onPurchaseSuccessCallback!(); // Play the video
+                      }
+                    },
+                    child: Text(
+                      isVi ? 'BẮT ĐẦU XEM VIDEO' : 'START WATCHING',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _playVideo(BattleVideo video, bool isVipUnlocked) {
@@ -153,11 +298,13 @@ class _VideoScreenState extends State<VideoScreen> {
                   // Title
                   Text(
                     isVi ? 'KÍCH HOẠT THÀNH VIÊN VIP' : 'ACTIVATE VIP MEMBERSHIP',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 20,
+                      fontSize: 15,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
+                      letterSpacing: 1,
                       shadows: [
                         Shadow(color: Color(0xFF00F0FF), blurRadius: 10),
                       ],
@@ -211,7 +358,7 @@ class _VideoScreenState extends State<VideoScreen> {
                           style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          isVi ? '\$2.00 (~49,000 VNĐ)' : '\$2.00 Lifetime',
+                          isVi ? '\$1.99 Trọn đời' : '\$1.99 Lifetime',
                           style: const TextStyle(
                             color: Color(0xFF00F0FF),
                             fontSize: 16,
@@ -223,44 +370,91 @@ class _VideoScreenState extends State<VideoScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Buy Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00F0FF),
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  // Purchase and Restore buttons row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 40,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF00F0FF),
+                              side: const BorderSide(color: Color(0xFF00F0FF), width: 1.2),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: EdgeInsets.zero,
+                            ),
+                            onPressed: () {
+                              _onPurchaseSuccessCallback = onPurchaseSuccess;
+                              Navigator.pop(context); // Close sheet
+                              Provider.of<DataService>(context, listen: false).restorePurchases();
+                            },
+                            child: Text(
+                              isVi ? 'KHÔI PHỤC' : 'RESTORE',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
                         ),
-                        elevation: 8,
-                        shadowColor: const Color(0xFF00F0FF).withValues(alpha: 0.5),
                       ),
-                      onPressed: () => _simulatePurchase(context, onPurchaseSuccess),
-                      child: Text(
-                        isVi ? 'MỞ KHÓA TRỌN ĐỜI (\$2)' : 'UNLOCK LIFETIME (\$2)',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 40,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00F0FF),
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              elevation: 4,
+                              shadowColor: const Color(0xFF00F0FF).withValues(alpha: 0.3),
+                              padding: EdgeInsets.zero,
+                            ),
+                            onPressed: () {
+                              _onPurchaseSuccessCallback = onPurchaseSuccess;
+                              Navigator.pop(context); // Close sheet
+                              Provider.of<DataService>(context, listen: false).buyPremium();
+                            },
+                            child: Text(
+                              isVi ? 'MỞ KHÓA (\$1.99)' : 'UNLOCK (\$1.99)',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  
-                  // Cancel Button
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
+                  const SizedBox(height: 16),
+
+                  // Privacy Policy link
+                  GestureDetector(
+                    onTap: () async {
+                      final url = Uri.parse('https://codego.io.vn/privacy_policy.html');
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      } 
+                    },
                     child: Text(
-                      isVi ? 'ĐỂ SAU' : 'MAYBE LATER',
+                      isVi ? 'Chính sách bảo mật' : 'Privacy Policy',
                       style: const TextStyle(
-                        color: Colors.white30,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
+                        color: Colors.white38,
+                        fontSize: 11,
+                        decoration: TextDecoration.underline,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -273,124 +467,15 @@ class _VideoScreenState extends State<VideoScreen> {
     );
   }
 
-  void _simulatePurchase(BuildContext context, VoidCallback onSuccess) {
-    final isVi = AppStrings.of(context).languageCode == 'vi';
-    
-    // Close the sheet first
-    Navigator.pop(context);
-
-    // Show simulated purchase dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return FutureBuilder(
-          future: Future.delayed(const Duration(milliseconds: 1800)),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Dialog(
-                backgroundColor: const Color(0xFF071224),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00F0FF)),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        isVi ? 'ĐANG KẾT NỐI MÁY CHỦ BẢO MẬT...' : 'CONNECTING SECURE GATEWAY...',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            // Purchase success state
-            return Dialog(
-              backgroundColor: const Color(0xFF071224),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFF00F0FF), width: 1),
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline_rounded,
-                      color: Color(0xFF00F0FF),
-                      size: 64,
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      isVi ? 'MỞ KHÓA THÀNH CÔNG!' : 'PURCHASE SUCCESSFUL!',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      isVi 
-                        ? 'Chúc mừng! Bạn đã sở hữu đặc quyền VIP trọn đời.' 
-                        : 'Congratulations! You now have permanent VIP status.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 44,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00F0FF),
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: () {
-                          // Unlock Premium state in DataService
-                          Provider.of<DataService>(context, listen: false).unlockPremium();
-                          Navigator.pop(context); // Close success dialog
-                          onSuccess(); // Execute action (play video)
-                        },
-                        child: Text(
-                          isVi ? 'BẮT ĐẦU XEM VIDEO' : 'START WATCHING',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
   Widget _buildPerkRow(String text, bool isChecked) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(
-          Icons.verified_user_rounded,
-          color: Color(0xFF00F0FF),
-          size: 18,
+        Image.asset(
+          'assets/images/icon/shield.png',
+          width: 18,
+          height: 18,
         ),
         const SizedBox(width: 12),
         Expanded(

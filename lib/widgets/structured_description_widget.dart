@@ -5,12 +5,14 @@ class StructuredDescriptionWidget extends StatefulWidget {
   final String description;
   final Color themeColor;
   final bool compact;
+  final int? singleParagraphIndex;
 
   const StructuredDescriptionWidget({
     super.key,
     required this.description,
     required this.themeColor,
     this.compact = false,
+    this.singleParagraphIndex,
   });
 
   @override
@@ -207,11 +209,20 @@ class _StructuredDescriptionWidgetState extends State<StructuredDescriptionWidge
         .where((p) => p.isNotEmpty)
         .toList();
 
+    final List<int> indices = [];
+    if (widget.singleParagraphIndex != null) {
+      if (widget.singleParagraphIndex! >= 0 && widget.singleParagraphIndex! < paragraphs.length) {
+        indices.add(widget.singleParagraphIndex!);
+      }
+    } else {
+      indices.addAll(List.generate(paragraphs.length, (i) => i));
+    }
+
     final Color highlightColor = _getHighlightColor();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: List.generate(paragraphs.length, (idx) {
+      children: indices.map<Widget>((idx) {
         String text = paragraphs[idx];
         if (!text.endsWith('.')) {
           text += '.';
@@ -280,14 +291,15 @@ class _StructuredDescriptionWidgetState extends State<StructuredDescriptionWidge
                               label,
                               style: TextStyle(
                                 color: widget.themeColor,
-                                fontSize: widget.compact ? 9.5 : 10.5,
+                                fontSize: widget.compact ? 9.5 : 11.0,
                                 fontWeight: FontWeight.bold,
                                 fontFamily: 'monospace',
-                                letterSpacing: 1.1,
+                                letterSpacing: 1.0,
                               ),
                             ),
                           ],
                         ),
+                        // Status text/code (Decentralized design)
                         Text(
                           "EXP_LOG // 0x${(idx + 1) * 31}A",
                           style: TextStyle(
@@ -354,7 +366,7 @@ class _StructuredDescriptionWidgetState extends State<StructuredDescriptionWidge
             ],
           ),
         );
-      }),
+      }).toList(),
     );
   }
 }

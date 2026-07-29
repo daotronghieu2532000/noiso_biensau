@@ -246,7 +246,7 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
           ),
           child: Column(
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               
               // 1. Majestic Badge Drawing Container
               SizedBox(
@@ -333,7 +333,7 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
                 ),
               ),
               
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               
               // 2. Info text layout
               Padding(
@@ -352,7 +352,7 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
                         letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       widget.description,
                       maxLines: 2,
@@ -364,7 +364,7 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
                         height: 1.3,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     
                     // Status tag
                     Container(
@@ -396,7 +396,7 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
             ],
           ),
         );

@@ -46,15 +46,20 @@ class SizeComparisonWidget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isEn ? "VISUAL SIZE COMPARISON" : "SO SÁNH KÍCH THƯỚC TRỰC QUAN",
-                style: const TextStyle(
-                  color: Color(0xFF00F0FF),
-                  fontSize: 12.0,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+              Expanded(
+                child: Text(
+                  isEn ? "VISUAL SIZE COMPARISON" : "SO SÁNH KÍCH THƯỚC TRỰC QUAN",
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Color(0xFF00F0FF),
+                    fontSize: 12.0,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 isEn ? "Real scale" : "Tỷ lệ thực tế",
                 style: TextStyle(

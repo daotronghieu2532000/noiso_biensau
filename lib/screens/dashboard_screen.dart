@@ -38,9 +38,30 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   final List<_RadarBlip> _blips = [];
   double _lastControllerValue = 0.0;
 
+  String? _backgroundImage;
+
+  final List<String> _bgImages = const [
+    'assets/images/creatures/banner2.jpeg',
+    'assets/images/creatures/banner1.jpg',
+    'assets/images/creatures/ocean_atlantic.png',
+    'assets/images/creatures/ocean_indian.png',
+    'assets/images/creatures/ocean_pacific.png',
+    'assets/images/creatures/ocean_southern.png',
+    'assets/images/creatures/ocean_arctic.png',
+    'assets/images/creatures/bg_bermuda.jpeg',
+    'assets/images/creatures/bg_dark_abyss.jpeg',
+    'assets/images/creatures/bg_deep_ocean.jpeg',
+    'assets/images/creatures/bg_ghost_ship.jpeg',
+    'assets/images/creatures/bg_giant_squid.jpeg',
+    'assets/images/creatures/bg_kraken.jpeg',
+    'assets/images/creatures/bg_research_sub.jpeg',
+    'assets/images/creatures/bg_shark.jpeg',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _backgroundImage = _bgImages[math.Random().nextInt(_bgImages.length)];
     _hudController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
@@ -125,16 +146,17 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       backgroundColor: const Color(0xFF010610),
       body: Stack(
         children: [
-          // 1. Full-screen Deep Sea Monster backdrop (low opacity for dread & readability)
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.14,
-              child: Image.asset(
-                'assets/images/creatures/Sea_monster_emerging_from_abyss_202605270013_cropped.png',
-                fit: BoxFit.cover,
+          // 1. Alternating background image
+          if (_backgroundImage != null)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.65,
+                child: Image.asset(
+                  _backgroundImage!,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-          ),
 
           // 2. Abyssal dark gradient overlay
           Positioned.fill(
@@ -192,30 +214,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   _buildStaggeredGrid(context, unlockedCreatures, totalCreatures, bestDepth),
                   const SizedBox(height: 24),
 
-                  // Back Navigation button
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.keyboard_arrow_left, color: Color(0xFF00F0FF), size: 20),
-                      label: Text(
-                        strings.backToObserver,
-                        style: const TextStyle(
-                          color: Color(0xFF00F0FF),
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
-                          fontSize: 11,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        backgroundColor: const Color(0xFF00F0FF).withValues(alpha: 0.04),
-                        side: BorderSide(color: const Color(0xFF00F0FF).withValues(alpha: 0.2)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -232,25 +230,54 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Digital tech ticker header
+        // Digital tech ticker header with Back button
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              'LAT: 11.3733° N | LON: 142.1167° E (MARIANA ABYSS)',
-              style: TextStyle(
-                color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
-                fontSize: 7.5,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: Wrap(
+                alignment: WrapAlignment.start,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    'LAT: 11.3733° N | LON: 142.1167° E (MARIANA ABYSS)',
+                    style: TextStyle(
+                      color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
+                      fontSize: 7.5,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'PRES: 108.6 MPa | TEMP: 1.8°C',
+                    style: TextStyle(
+                      color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
+                      fontSize: 7.5,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text(
-              'PRES: 108.6 MPa | TEMP: 1.8°C',
-              style: TextStyle(
-                color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
-                fontSize: 7.5,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.bold,
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00F0FF).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3), width: 0.8),
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Color(0xFF00F0FF),
+                  size: 14,
+                ),
               ),
             ),
           ],
@@ -544,8 +571,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 height: 140,
                 iconWidget: Image.asset(
                   'assets/images/icon/map.png',
-                  width: 38,
-                  height: 38,
+                  width: 46,
+                  height: 46,
                 ),
                 title: strings.moduleMapTitle,
                 subtitle: 'OCEAN GEOMAP',
@@ -566,9 +593,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 context: context,
                 height: 190,
                 iconWidget: Image.asset(
-                  'assets/images/icon/scuba-mask.png',
-                  width: 38,
-                  height: 38,
+                  'assets/images/icon/oxygen-mask.png',
+                  width: 46,
+                  height: 46,
                 ),
                 title: strings.moduleSimulatorTitle,
                 subtitle: 'DESCENT SIMULATOR',
@@ -596,13 +623,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 context: context,
                 height: 190,
                 iconWidget: Image.asset(
-                  'assets/images/icon/cthulhu.png',
-                  width: 38,
-                  height: 38,
+                  'assets/images/icon/dra00.png',
+                  width: 72,
+                  height: 72,
                 ),
                 title: strings.moduleSonarTitle,
                 subtitle: 'BIOMASS SCANNER',
-                status: 'ACTIVE SWEEP',
+                status: 'ACTIVE ',
                 color: const Color(0xFFFF3366),
                 details: strings.moduleSonarDesc,
                 imageAsset: 'assets/images/creatures/the_bloop.png',
@@ -620,8 +647,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 height: 140,
                 iconWidget: Image.asset(
                   'assets/images/icon/pirate-hat.png',
-                  width: 38,
-                  height: 38,
+                  width: 46,
+                  height: 46,
                 ),
                 title: strings.moduleLogbookTitle,
                 subtitle: 'CAPTAIN LOGBOOK',

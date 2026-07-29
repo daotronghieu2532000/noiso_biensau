@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import '../models/creature.dart';
 import '../services/data_service.dart';
@@ -38,10 +39,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _crackSpawnCooldown = 0;
   final math.Random _random = math.Random();
   bool _isActive = true;
+  String _videoIcon = 'assets/images/icon/dra00.png';
+  final List<String> _lavaIcons = const [
+    'assets/images/icon/dra00.png',
+    'assets/images/icon/dra11.png',
+    'assets/images/icon/dra4.png',
+  ];
+
+  Future<void> _loadVideoIcon() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int currentIndex = prefs.getInt('video_icon_index_v3') ?? 0;
+      final int nextIndex = (currentIndex + 1) % _lavaIcons.length;
+      await prefs.setInt('video_icon_index_v3', nextIndex);
+      setState(() {
+        _videoIcon = _lavaIcons[currentIndex];
+      });
+    } catch (e) {
+      // Fallback
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadVideoIcon();
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
 
@@ -1026,7 +1048,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(20.0),
                 border: Border.all(
                   color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
@@ -1081,8 +1103,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
           // 4b. Floating HUD: Dashboard Control Console Button (Menu)
           Positioned(
-            left: 8.0,
-            top: MediaQuery.of(context).padding.top + 115.0,
+            right: 8.0,
+            top: MediaQuery.of(context).padding.top + 72.0,
             child: _BalloonHUDButton(
               animation: _particleController,
               phaseOffset: 1.5,
@@ -1090,7 +1112,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               borderColor: const Color(0xFF00F0FF),
               onTap: () => _navigateTo(const DashboardScreen()),
               child: Image.asset(
-                'assets/images/icon/menu.png',
+                'assets/images/icon/cruise.png',
                 width: 36,
                 height: 36,
               ),
@@ -1099,8 +1121,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
           // 4c. Floating HUD: Settings Button (Symmetric top-right under depth meter)
           Positioned(
-            right: 8.0,
-            top: MediaQuery.of(context).padding.top + 72.0,
+            left: 8.0,
+            top: MediaQuery.of(context).padding.top + 115.0,
             child: _BalloonHUDButton(
               animation: _particleController,
               phaseOffset: 3.0,
@@ -1143,8 +1165,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               gradientColors: const [Color(0xFFE91E63), Color(0xFF9C27B0)],
               borderColor: const Color(0xFF00F0FF),
               onTap: () => _navigateTo(const VideoScreen()),
+              scale: 1.55,
+              isLava: true,
               child: Image.asset(
-                'assets/images/icon/dragon (2).png',
+                _videoIcon,
                 width: 36,
                 height: 36,
               ),
@@ -3113,7 +3137,7 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
         }
         
         setState(() {
-          _videoOpacity = 1.0;
+          _videoOpacity = 0.18;
         });
       }
     } catch (e) {
@@ -3246,6 +3270,8 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required by AutomaticKeepAliveClientMixin
+    final bool isVideoVisible = widget.depth >= 10500;
+
     return Container(
       margin: const EdgeInsets.only(top: 60.0),
       height: 320.0,
@@ -3261,14 +3287,9 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Mariana Trench Background Image (Full Width & Height)
-          Image.asset(
-            'assets/images/creatures/mariana_trench.png',
-            fit: BoxFit.cover,
-          ),
 
           // 2. Video Player xuôi
-          if (_forwardController != null && _forwardController!.value.isInitialized && !_isForwardError)
+          if (isVideoVisible && _forwardController != null && _forwardController!.value.isInitialized && !_isForwardError)
             Offstage(
               offstage: !_isShowingForward,
               child: Opacity(
@@ -3287,7 +3308,7 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
             ),
 
           // 3. Video Player ngược
-          if (_reverseController != null && _reverseController!.value.isInitialized && !_isReverseError)
+          if (isVideoVisible && _reverseController != null && _reverseController!.value.isInitialized && !_isReverseError)
             Offstage(
               offstage: _isShowingForward,
               child: Opacity(
@@ -3331,6 +3352,8 @@ class _BalloonHUDButton extends StatelessWidget {
   final Animation<double> animation;
   final double phaseOffset;
   final Color borderColor;
+  final double scale;
+  final bool isLava;
 
   const _BalloonHUDButton({
     required this.child,
@@ -3339,6 +3362,8 @@ class _BalloonHUDButton extends StatelessWidget {
     required this.animation,
     required this.phaseOffset,
     required this.borderColor,
+    this.scale = 1.0,
+    this.isLava = false,
   });
 
   @override
@@ -3359,36 +3384,69 @@ class _BalloonHUDButton extends StatelessWidget {
               clipBehavior: Clip.none,
               alignment: Alignment.topCenter,
               children: [
-                // Swaying string (drawn behind/below the balloon)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: CustomPaint(
-                    painter: _BalloonStringPainter(
-                      swayOffset: swayOffset,
-                      balloonSize: 48.0,
-                      knotColor: const Color(0xFFFFFFFF),
-                    ),
-                  ),
-                ),
-                // Balloon body (transparent background with a white border outline)
-                Positioned(
-                  top: 0,
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.transparent,
-                      border: Border.all(
-                        color: const Color(0xFFFFFFFF).withValues(alpha: 0.6),
-                        width: 1.2,
+                // Swaying string (drawn behind/below the balloon) - only show if not lava
+                if (!isLava)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: CustomPaint(
+                      painter: _BalloonStringPainter(
+                        swayOffset: swayOffset,
+                        balloonSize: 48.0,
+                        knotColor: const Color(0xFFFFFFFF),
                       ),
                     ),
-                    alignment: Alignment.center,
-                    child: child,
+                  ),
+                // Balloon body or Lava item
+                Positioned(
+                  top: 0,
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Icon Container
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: isLava
+                              ? const BoxDecoration(
+                                  color: Colors.transparent,
+                                )
+                              : BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.transparent,
+                                  border: Border.all(
+                                    color: const Color(0xFFFFFFFF).withValues(alpha: 0.6),
+                                    width: 1.2,
+                                  ),
+                                ),
+                          alignment: Alignment.center,
+                          child: Transform.scale(
+                            scale: scale,
+                            child: child,
+                          ),
+                        ),
+                        // Glowing Lava Bar at the bottom of the icon
+                        if (isLava)
+                          Positioned(
+                            bottom: -2,
+                            left: 0,
+                            right: 0,
+                            child: SizedBox(
+                              height: 10,
+                              child: CustomPaint(
+                                painter: _LavaPainter(
+                                  animationValue: animation.value,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -3480,6 +3538,76 @@ class _BalloonStringPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _BalloonStringPainter oldDelegate) {
     return oldDelegate.swayOffset != swayOffset || oldDelegate.knotColor != knotColor;
+  }
+}
+
+class _LavaPainter extends CustomPainter {
+  final double animationValue;
+
+  _LavaPainter({required this.animationValue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    
+    // Wave calculations using sine waves shifting over time (boiling/rippling effect)
+    final double angle = animationValue * 2 * math.pi;
+    
+    // Generate organic wavy path
+    final path = Path();
+    path.moveTo(0, h);
+    path.lineTo(0, h * 0.55);
+    
+    // Create multiple organic liquid wave points
+    final double y1 = h * 0.5 + math.sin(angle * 4.0) * 1.5;
+    final double y2 = h * 0.35 + math.cos(angle * 2.5) * 2.2;
+    final double y3 = h * 0.55 + math.sin(angle * 5.0) * 1.2;
+    
+    path.quadraticBezierTo(w * 0.25, y1, w * 0.5, y2);
+    path.quadraticBezierTo(w * 0.75, y3, w, h * 0.45);
+    path.lineTo(w, h);
+    path.close();
+
+    // 1. Draw Deep Orange Glowing Shadow
+    final Paint glowPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFFFF3D00).withValues(alpha: 0.7)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 5.0 + math.sin(angle * 3.0) * 1.5);
+    canvas.drawPath(path, glowPaint);
+
+    // 2. Draw Yellow Hot Center Glow
+    final Paint coreGlow = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFFFFD600).withValues(alpha: 0.9)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.0);
+    canvas.drawPath(path, coreGlow);
+
+    // 3. Draw Liquid Gradient Body
+    final Paint lavaPaint = Paint()
+      ..style = PaintingStyle.fill;
+    
+    final rect = Rect.fromLTWH(0, 0, w, h);
+    // Flow shift shifts the gradient sideways for a fluid moving effect
+    final double shift = math.sin(angle * 1.5) * 0.15;
+    lavaPaint.shader = LinearGradient(
+      colors: const [
+        Color(0xFFFF1744), // Molten red
+        Color(0xFFFF3D00), // Lava orange
+        Color(0xFFFF9100), // Bright orange
+        Color(0xFFFFEA00), // Glowing yellow
+        Color(0xFFFF3D00), // Lava orange
+      ],
+      begin: Alignment(-1.0 + shift, 0.0),
+      end: Alignment(1.0 + shift, 0.0),
+    ).createShader(rect);
+
+    canvas.drawPath(path, lavaPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LavaPainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue;
   }
 }
 

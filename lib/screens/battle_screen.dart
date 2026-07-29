@@ -1022,11 +1022,11 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                               ),
                               color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
                             ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.shield,
-                                color: Color(0xFF00F0FF),
-                                size: 40.0,
+                            child: Center(
+                              child: Image.asset(
+                                'assets/images/icon/shield.png',
+                                width: 40.0,
+                                height: 40.0,
                               ),
                             ),
                           ),
@@ -1043,10 +1043,10 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                               color: Colors.orange,
                               borderRadius: BorderRadius.circular(4.0),
                             ),
-                            child: const Icon(
-                              Icons.bolt,
-                              color: Colors.white,
-                              size: 16.0,
+                            child: Image.asset(
+                              'assets/images/icon/battery.png',
+                              width: 16.0,
+                              height: 16.0,
                             ),
                           ),
                         ),
@@ -1122,7 +1122,14 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                       children: [
                         // HEAL
                         _buildSkillButton(
-                          icon: Icons.favorite,
+                          icon: Opacity(
+                            opacity: (isLeft ? _leftHasHeal : _rightHasHeal) ? 1.0 : 0.35,
+                            child: Image.asset(
+                              'assets/images/icon/heal.png',
+                              width: 24,
+                              height: 24,
+                            ),
+                          ),
                           color: Colors.green,
                           isActive: isLeft ? _leftHasHeal : _rightHasHeal,
                           onTap: isLeft ? _useLeftHeal : _useRightHeal,
@@ -1130,7 +1137,14 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                         ),
                         // SHIELD
                         _buildSkillButton(
-                          icon: Icons.shield,
+                          icon: Opacity(
+                            opacity: (isLeft ? _leftHasShield : _rightHasShield) ? 1.0 : 0.35,
+                            child: Image.asset(
+                              'assets/images/icon/shield.png',
+                              width: 24,
+                              height: 24,
+                            ),
+                          ),
                           color: const Color(0xFF00F0FF),
                           isActive: isLeft ? _leftHasShield : _rightHasShield,
                           onTap: isLeft ? _useLeftShield : _useRightShield,
@@ -1138,7 +1152,14 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                         ),
                         // RAGE
                         _buildSkillButton(
-                          icon: Icons.bolt,
+                          icon: Opacity(
+                            opacity: (isLeft ? _leftHasRage : _rightHasRage) ? 1.0 : 0.35,
+                            child: Image.asset(
+                              'assets/images/icon/battery.png',
+                              width: 24,
+                              height: 24,
+                            ),
+                          ),
                           color: Colors.orange,
                           isActive: isLeft ? _leftHasRage : _rightHasRage,
                           onTap: isLeft ? _useLeftRage : _useRightRage,
@@ -1182,7 +1203,7 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
   }
 
   Widget _buildSkillButton({
-    required IconData icon,
+    required Widget icon,
     required Color color,
     required bool isActive,
     required VoidCallback onTap,
@@ -1195,16 +1216,8 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isActive ? color.withValues(alpha: 0.15) : Colors.white10,
-          border: Border.all(
-            color: isActive ? color : Colors.white24,
-            width: 1.0,
-          ),
         ),
-        child: Icon(
-          icon,
-          color: isActive ? color : Colors.white30,
-          size: 14.0,
-        ),
+        child: icon,
       ),
     );
   }

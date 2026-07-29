@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/creature.dart';
 import '../services/data_service.dart';
@@ -19,10 +20,30 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
   late TabController _tabController;
   final Map<String, bool> _animatedMedals = {};
   bool _prefsLoaded = false;
+  String? _backgroundImage;
+
+  final List<String> _bgImages = const [
+    'assets/images/creatures/banner2.jpeg',
+    'assets/images/creatures/banner1.jpg',
+    'assets/images/creatures/ocean_atlantic.png',
+    'assets/images/creatures/ocean_indian.png',
+    'assets/images/creatures/ocean_pacific.png',
+    'assets/images/creatures/ocean_southern.png',
+    'assets/images/creatures/ocean_arctic.png',
+    'assets/images/creatures/bg_bermuda.jpeg',
+    'assets/images/creatures/bg_dark_abyss.jpeg',
+    'assets/images/creatures/bg_deep_ocean.jpeg',
+    'assets/images/creatures/bg_ghost_ship.jpeg',
+    'assets/images/creatures/bg_giant_squid.jpeg',
+    'assets/images/creatures/bg_kraken.jpeg',
+    'assets/images/creatures/bg_research_sub.jpeg',
+    'assets/images/creatures/bg_shark.jpeg',
+  ];
 
   @override
   void initState() {
     super.initState();
+    _backgroundImage = _bgImages[math.Random().nextInt(_bgImages.length)];
     _tabController = TabController(length: 2, vsync: this);
     _loadMedalStates();
   }
@@ -155,6 +176,7 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
 
     return Scaffold(
       backgroundColor: const Color(0xFF020813),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D1F3D).withValues(alpha: 0.8),
         elevation: 0,
@@ -182,11 +204,35 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildCreatureLog(dataService),
-          _buildMissionLog(dataService),
+          // 1. Alternating background image
+          if (_backgroundImage != null)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.65,
+                child: Image.asset(
+                  _backgroundImage!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          // 2. Abyssal dark overlay
+          Positioned.fill(
+            child: Container(
+              color: const Color(0xFF020813).withValues(alpha: 0.75),
+            ),
+          ),
+          // 3. Main content
+          SafeArea(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildCreatureLog(dataService),
+                _buildMissionLog(dataService),
+              ],
+            ),
+          ),
         ],
       ),
     );

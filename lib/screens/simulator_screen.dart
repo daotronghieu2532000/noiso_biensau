@@ -45,9 +45,30 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
   int _threatTicks = 0;
   bool _oxygenWarningActive = false;
 
+  String? _backgroundImage;
+
+  final List<String> _bgImages = const [
+    'assets/images/creatures/banner2.jpeg',
+    'assets/images/creatures/banner1.jpg',
+    'assets/images/creatures/ocean_atlantic.png',
+    'assets/images/creatures/ocean_indian.png',
+    'assets/images/creatures/ocean_pacific.png',
+    'assets/images/creatures/ocean_southern.png',
+    'assets/images/creatures/ocean_arctic.png',
+    'assets/images/creatures/bg_bermuda.jpeg',
+    'assets/images/creatures/bg_dark_abyss.jpeg',
+    'assets/images/creatures/bg_deep_ocean.jpeg',
+    'assets/images/creatures/bg_ghost_ship.jpeg',
+    'assets/images/creatures/bg_giant_squid.jpeg',
+    'assets/images/creatures/bg_kraken.jpeg',
+    'assets/images/creatures/bg_research_sub.jpeg',
+    'assets/images/creatures/bg_shark.jpeg',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _backgroundImage = _bgImages[_random.nextInt(_bgImages.length)];
     _hudAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -407,37 +428,59 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
 
     return Scaffold(
       backgroundColor: const Color(0xFF020813),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 8),
-
-              // Main Cockpit Simulator Screen
-              Expanded(
-                flex: 7,
-                child: _gameOver 
-                    ? _buildGameOverPanel(dataService) 
-                    : _buildSimulationPanel(dataService),
+      body: Stack(
+        children: [
+          // 1. Alternating background image
+          if (_backgroundImage != null)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.65,
+                child: Image.asset(
+                  _backgroundImage!,
+                  fit: BoxFit.cover,
+                ),
               ),
-              const SizedBox(height: 12),
-
-              // Action HUD Control buttons
-              if (_gameActive && !_gameOver) ...[
-                _buildControlsPanel(),
-                const SizedBox(height: 12),
-              ],
-
-              // Text Log console
-              Expanded(
-                flex: 3,
-                child: _buildLogConsole(),
-              ),
-            ],
+            ),
+          // 2. Abyssal dark overlay
+          Positioned.fill(
+            child: Container(
+              color: const Color(0xFF020813).withValues(alpha: 0.75),
+            ),
           ),
-        ),
+          // 3. Main content
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                children: [
+                  _buildHeader(context),
+                  const SizedBox(height: 8),
+
+                  // Main Cockpit Simulator Screen
+                  Expanded(
+                    flex: 7,
+                    child: _gameOver 
+                        ? _buildGameOverPanel(dataService) 
+                        : _buildSimulationPanel(dataService),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Action HUD Control buttons
+                  if (_gameActive && !_gameOver) ...[
+                    _buildControlsPanel(),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Text Log console
+                  Expanded(
+                    flex: 3,
+                    child: _buildLogConsole(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

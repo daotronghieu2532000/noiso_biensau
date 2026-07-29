@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../models/creature.dart';
 import '../services/data_service.dart';
 import '../services/sound_service.dart';
-import '../widgets/structured_description_widget.dart';
 import '../l10n/app_strings.dart';
 import 'settings_screen.dart';
 
@@ -19,6 +18,7 @@ class SonarScreen extends StatefulWidget {
 
 // Monster blip positioned inside the Bermuda Triangle radar
 class _MonsterBlip {
+  final Creature creature;
   final String imageUrl;
   final double angle; // radians
   final double distanceRatio; // 0.0 – 0.8 relative to triangle inradius
@@ -26,6 +26,7 @@ class _MonsterBlip {
   final bool isDangerous;
 
   _MonsterBlip({
+    required this.creature,
     required this.imageUrl,
     required this.angle,
     required this.distanceRatio,
@@ -40,11 +41,10 @@ class _SonarScreenState extends State<SonarScreen>
   late AnimationController _pulseController;
   late AnimationController _glitchController;
 
-  final List<RadarBlip> _blips = [];
   final List<_MonsterBlip> _monsterBlips = [];
   final math.Random _random = math.Random();
 
-  RadarBlip? _lockedBlip;
+  _MonsterBlip? _lockedBlip;
   bool _isScanning = false;
   double _scanProgress = 0.0;
   Timer? _scanTimer;
@@ -52,9 +52,30 @@ class _SonarScreenState extends State<SonarScreen>
   Creature? _scannedCreature;
   late SoundService _soundService;
 
+  String? _backgroundImage;
+
+  final List<String> _bgImages = const [
+    'assets/images/creatures/banner2.jpeg',
+    'assets/images/creatures/banner1.jpg',
+    'assets/images/creatures/ocean_atlantic.png',
+    'assets/images/creatures/ocean_indian.png',
+    'assets/images/creatures/ocean_pacific.png',
+    'assets/images/creatures/ocean_southern.png',
+    'assets/images/creatures/ocean_arctic.png',
+    'assets/images/creatures/bg_bermuda.jpeg',
+    'assets/images/creatures/bg_dark_abyss.jpeg',
+    'assets/images/creatures/bg_deep_ocean.jpeg',
+    'assets/images/creatures/bg_ghost_ship.jpeg',
+    'assets/images/creatures/bg_giant_squid.jpeg',
+    'assets/images/creatures/bg_kraken.jpeg',
+    'assets/images/creatures/bg_research_sub.jpeg',
+    'assets/images/creatures/bg_shark.jpeg',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _backgroundImage = _bgImages[math.Random().nextInt(_bgImages.length)];
     _radarController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -74,8 +95,6 @@ class _SonarScreenState extends State<SonarScreen>
     _blipRegenerateTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) _regenerateMonsterBlips();
     });
-
-    _generateBlips();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _soundService.playAmbient("sonar_echo.mp3");
@@ -98,7 +117,7 @@ class _SonarScreenState extends State<SonarScreen>
   }
 
   void _regenerateMonsterBlips() {
-    if (!mounted) return;
+    if (!mounted || _isScanning || _scannedCreature != null) return;
     final dataService = Provider.of<DataService>(context, listen: false);
     final creatures = dataService.creatures;
     if (creatures.isEmpty) return;
@@ -116,6 +135,7 @@ class _SonarScreenState extends State<SonarScreen>
         final size = 28.0 + _random.nextDouble() * 18.0;
         final isDangerous = creature.dangerLevel >= 3;
         _monsterBlips.add(_MonsterBlip(
+          creature: creature,
           imageUrl: creature.imageUrl,
           angle: angle,
           distanceRatio: distanceRatio,
@@ -126,23 +146,23 @@ class _SonarScreenState extends State<SonarScreen>
     });
   }
 
-  void _generateBlips() {
-    _blips.clear();
-    for (int i = 0; i < 3; i++) {
-      final double angle = _random.nextDouble() * 2 * math.pi;
-      final double distanceRatio = 0.2 + _random.nextDouble() * 0.5;
-      _blips.add(
-        RadarBlip(
-          id: i,
-          angle: angle,
-          distanceRatio: distanceRatio,
-          pulseSize: 6.0,
-        ),
-      );
+  void _onTapMonsterBlip(_MonsterBlip blip, double opacity) {
+    if (_isScanning) return;
+    
+    // "rada đang quét" check: opacity must be high enough (e.g. > 0.25)
+    // This means the monster blip is currently illuminated by the sweep line.
+    final bool isVisibleOnRadar = opacity > 0.25;
+    
+    if (isVisibleOnRadar) {
+      _captureMonster(blip);
+    } else {
+      // Missed! Play sound / feedback
+      _soundService.playCreatureSound("sonar_echo.mp3");
+      _glitchController.forward(from: 0.0);
     }
   }
 
-  void _lockAndScanBlip(RadarBlip blip) {
+  void _captureMonster(_MonsterBlip blip) {
     if (_isScanning) return;
     _soundService.playCreatureSound("sonar_echo.mp3");
 
@@ -153,39 +173,35 @@ class _SonarScreenState extends State<SonarScreen>
       _scannedCreature = null;
     });
 
-    const duration = Duration(milliseconds: 2500);
-    const interval = Duration(milliseconds: 50);
+    // 800ms rapid capture/lock animation
+    const duration = Duration(milliseconds: 800);
+    const interval = Duration(milliseconds: 40);
     int elapsed = 0;
 
     _scanTimer = Timer.periodic(interval, (timer) {
       elapsed += interval.inMilliseconds;
-      setState(() {
-        _scanProgress = (elapsed / duration.inMilliseconds).clamp(0.0, 1.0);
-      });
+      if (mounted) {
+        setState(() {
+          _scanProgress = (elapsed / duration.inMilliseconds).clamp(0.0, 1.0);
+        });
+      }
 
       if (elapsed >= duration.inMilliseconds) {
         timer.cancel();
-        _revealScannedCreature();
+        _revealMonster(blip);
       }
     });
   }
 
-  void _revealScannedCreature() {
+  void _revealMonster(_MonsterBlip blip) {
     final dataService = Provider.of<DataService>(context, listen: false);
-    final lockedCreatures =
-        dataService.creatures.where((c) => c.isLocked).toList();
-
+    
     setState(() {
       _isScanning = false;
-      if (lockedCreatures.isNotEmpty) {
-        final chosen =
-            lockedCreatures[_random.nextInt(lockedCreatures.length)];
-        _scannedCreature = chosen;
-        dataService.unlockCreature(chosen.id);
-        _soundService.playCreatureSound("The_BLOOP.mp3");
-      } else {
-        _scannedCreature = null;
-      }
+      _scannedCreature = blip.creature;
+      // Unlock the creature in dataService
+      dataService.unlockCreature(blip.creature.id);
+      _soundService.playCreatureSound("The_BLOOP.mp3");
     });
   }
 
@@ -212,6 +228,23 @@ class _SonarScreenState extends State<SonarScreen>
       backgroundColor: const Color(0xFF020813),
       body: Stack(
         children: [
+          // 1. Alternating background image
+          if (_backgroundImage != null)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.65,
+                child: Image.asset(
+                  _backgroundImage!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          // 2. Abyssal dark overlay
+          Positioned.fill(
+            child: Container(
+              color: const Color(0xFF020813).withValues(alpha: 0.75),
+            ),
+          ),
           // Corner telemetry HUD overlay
           _buildCornerTelemetry(),
 
@@ -328,17 +361,19 @@ class _SonarScreenState extends State<SonarScreen>
                     top: y - blip.size / 2,
                     child: Opacity(
                       opacity: opacity,
-                      child: Container(
-                        width: blip.size,
-                        height: blip.size,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.transparent,
-                          border: Border.all(
-                            color: tint.withValues(alpha: 0.3),
-                            width: 0.5,
+                      child: GestureDetector(
+                        onTap: () => _onTapMonsterBlip(blip, opacity),
+                        child: Container( 
+                          width: blip.size,
+                          height: blip.size,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.transparent,
+                            border: Border.all(
+                              color: tint.withValues(alpha: 0.3),
+                              width: 0.5,
+                            ),
                           ),
-                        ),
                           child: ClipOval(
                             child: blip.imageUrl.startsWith('http')
                                 ? Image.network(
@@ -364,55 +399,11 @@ class _SonarScreenState extends State<SonarScreen>
                                     ),
                                   ),
                           ),
+                        ),
                       ),
                     ),
                   );
                 },
-              );
-            }),
-
-            // ── 3. Interactive danger blips (tap to scan) ──────────────────
-            ..._blips.map((blip) {
-              final double x = centroid.dx +
-                  (inradius * blip.distanceRatio) * math.cos(blip.angle);
-              final double y = centroid.dy +
-                  (inradius * blip.distanceRatio) * math.sin(blip.angle);
-
-              return Positioned(
-                left: x - 28,
-                top: y - 28,
-                child: GestureDetector(
-                  onTap: () => _lockAndScanBlip(blip),
-                  child: SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: AnimatedBuilder(
-                      animation: _pulseController,
-                      builder: (_, _) {
-                        final bool isTargeted =
-                            _lockedBlip?.id == blip.id;
-                        final double pulse = _pulseController.value;
-                        final Color dangerColor = isTargeted
-                            ? const Color(0xFFFF0033)
-                            : const Color(0xFFFF4400);
-                        final double size =
-                            isTargeted ? 12 + pulse * 4 : 9 + pulse * 3;
-
-                        return Center(
-                          child: CustomPaint(
-                            size: Size(size * 2, size * 2),
-                            painter: DangerTrianglePainter(
-                              color: dangerColor,
-                              glowSize: isTargeted
-                                  ? size * 1.8
-                                  : size * 1.2,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
               );
             }),
 
@@ -499,7 +490,6 @@ class _SonarScreenState extends State<SonarScreen>
                   setState(() {
                     _lockedBlip = null;
                     _scannedCreature = null;
-                    _generateBlips();
                   });
                   _regenerateMonsterBlips();
                 }
@@ -642,8 +632,8 @@ class _SonarScreenState extends State<SonarScreen>
         child: Text(
           hasLocked
               ? (strings.languageCode == 'en'
-                  ? '▲  TAP A DANGER BLIP TO LOCK TARGET & SCAN  ▲'
-                  : '▲  CHẠM VÀO TÍN HIỆU ĐỎ ĐỂ KHÓA & DÒ QUÉT  ▲')
+                  ? '▲  TAP AN ACTIVE CREATURE SCAN TO CAPTURE TARGET  ▲'
+                  : '▲  CHẠM VÀO THỦY QUÁI KHI RADAR QUÉT QUA ĐỂ SĂN  ▲')
               : (strings.languageCode == 'en'
                   ? 'ALL ABYSSAL ENTITIES FULLY CATALOGUED'
                   : 'ĐÃ DÒ QUÉT TOÀN BỘ THỰC THỂ VỰC THẲM'),
@@ -675,252 +665,253 @@ class _SonarScreenState extends State<SonarScreen>
       child: GestureDetector(
         onTap: () {},
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-            color: Colors.black.withValues(alpha: 0.85),
-            alignment: Alignment.center,
-            child: SingleChildScrollView(
-              child: Container(
-                width: screenWidth * 0.9,
-                margin: const EdgeInsets.symmetric(vertical: 24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF030B17),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: themeColor, width: 2.0),
-                  boxShadow: [
-                    BoxShadow(
-                      color: themeColor.withValues(alpha: 0.25),
-                      blurRadius: 20,
-                      spreadRadius: 2,
+            color: Colors.black.withValues(alpha: 0.9),
+            child: Stack(
+              children: [
+                // 1. Grid telemetry background
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0.05,
+                    child: GridPaper(
+                      color: themeColor,
+                      divisions: 1,
+                      subdivisions: 1,
+                      interval: 40,
                     ),
-                  ],
+                  ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: themeColor.withValues(alpha: 0.1),
-                        borderRadius:
-                            const BorderRadius.vertical(top: Radius.circular(14)),
-                        border: Border(
-                            bottom: BorderSide(
-                                color: themeColor.withValues(alpha: 0.3))),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isHighDanger
-                                      ? Icons.warning_amber_rounded
-                                      : Icons.radar,
-                                  color: themeColor,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isHighDanger
-                                        ? (strings.languageCode == 'en'
-                                            ? 'WARNING: ANCIENT ENTITY'
-                                            : 'CẢNH BÁO: THỰC THỂ CỔ ĐẠI')
-                                        : (strings.languageCode == 'en'
-                                            ? 'NEW CREATURE DETECTED'
-                                            : 'PHÁT HIỆN SINH VẬT MỚI'),
-                                    style: TextStyle(
-                                      color: themeColor,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
+
+                // 2. Creature image - Giant Centered Hero
+                Positioned(
+                  top: screenHeight * 0.14,
+                  left: 0,
+                  right: 0,
+                  height: screenHeight * 0.48,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Radial background glow behind the giant creature
+                      Container(
+                        width: screenWidth * 0.9,
+                        height: screenWidth * 0.9,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              themeColor.withValues(alpha: 0.22),
+                              Colors.transparent,
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            strings.languageCode == 'en'
-                                ? 'LVL: ${creature.dangerLevel}/5'
-                                : 'CẤP: ${creature.dangerLevel}/5',
-                            style: TextStyle(
-                              color: themeColor,
-                              fontSize: 10,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                    Stack(
-                      children: [
-                        creature.buildImage(
-                          width: double.infinity,
-                          height: screenHeight * 0.48,
-                          fit: BoxFit.cover,
+                      
+                      // Giant creature image with scale
+                      Transform.scale(
+                        scale: 1.25,
+                        child: creature.buildImage(
+                          width: screenWidth * 0.88,
+                          height: screenHeight * 0.45,
+                          fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                            width: double.infinity,
-                            height: screenHeight * 0.48,
-                            color: const Color(0xFF010409),
-                            child:
-                                Icon(Icons.waves, color: themeColor, size: 64),
-                          ),
+                              Icon(Icons.waves, color: themeColor, size: 80),
                         ),
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  Colors.black.withValues(alpha: 0.1),
-                                  const Color(0xFF030B17),
-                                ],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                stops: const [0.0, 0.6, 1.0],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Opacity(
-                            opacity: 0.08,
-                            child: GridPaper(
-                              color: themeColor,
-                              divisions: 1,
-                              subdivisions: 1,
-                              interval: 40,
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
+                      ),
+
+                      // Holographic bracket painter around the giant creature image
+                      Positioned.fill(
+                        child: IgnorePointer(
                           child: CustomPaint(
                             painter: DiscoveryBracketsPainter(color: themeColor),
                           ),
                         ),
-                      ],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 3. Cybernetic UI overlays
+                // Top header
+                Positioned(
+                  top: 40,
+                  left: 24,
+                  right: 24,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            creature.getName(strings.languageCode).toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            creature.scientificName,
-                            style: TextStyle(
-                              color: themeColor,
-                              fontSize: 13,
-                              fontStyle: FontStyle.italic,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildBiometricRow(
-                            Icons.straighten,
-                            strings.languageCode == 'en'
-                                ? 'SIZE RELATION'
-                                : 'KÍCH THƯỚC VŨ TRỤ',
-                            creature.getSizeHumanRatio(strings.languageCode),
-                            themeColor,
-                          ),
-                          _buildBiometricRow(
-                            Icons.compress,
-                            strings.languageCode == 'en'
-                                ? 'DEPTH DISTRIBUTION'
-                                : 'ĐỘ SÂU PHÂN BỐ',
-                            '${creature.minDepth}m - ${creature.maxDepth}m',
-                            themeColor,
-                          ),
-                          _buildBiometricRow(
-                            Icons.report_problem,
-                            strings.languageCode == 'en'
-                                ? 'THREAT LEVEL'
-                                : 'CHỈ SỐ ĐE DỌA',
-                            '★' * creature.dangerLevel +
-                                '☆' * (5 - creature.dangerLevel),
-                            isHighDanger
-                                ? const Color(0xFFFF3366)
-                                : const Color(0xFF00F0FF),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            strings.languageCode == 'en'
-                                ? 'FIELD EXPLORATION LOG'
-                                : 'NHẬT KÝ THÁM HIỂM THỰC ĐỊA',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.4),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          StructuredDescriptionWidget(
-                            description:
-                                creature.getDescription(strings.languageCode),
-                            themeColor: themeColor,
-                            compact: true,
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _scannedCreature = null;
-                                  _lockedBlip = null;
-                                  _generateBlips();
-                                });
-                                _regenerateMonsterBlips();
-                              },
-                              icon: const Icon(Icons.assignment_turned_in,
-                                  color: Colors.black),
-                              label: Text(
-                                strings.languageCode == 'en'
-                                    ? 'RECORD IN LOGBOOK'
-                                    : 'GHI NHẬN VÀO NHẬT KÝ',
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                  letterSpacing: 1,
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: themeColor,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: themeColor,
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
                                 ),
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: themeColor,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
+                              const SizedBox(width: 8),
+                              Text(
+                                isHighDanger
+                                    ? (strings.languageCode == 'en' ? 'WARNING: ANCIENT CLASS' : 'CẢNH BÁO: THỰC THỂ CỔ ĐẠI')
+                                    : (strings.languageCode == 'en' ? 'BIOMASS IDENTIFIED' : 'ĐÃ XÁC ĐỊNH SINH VẬT'),
+                                style: TextStyle(
+                                  color: themeColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                  letterSpacing: 2.0,
+                                ),
                               ),
+                            ],
+                          ),
+                          Text(
+                            'DECK_ID // #0${creature.id.hashCode % 1000}',
+                            style: TextStyle(
+                              color: themeColor.withValues(alpha: 0.4),
+                              fontSize: 9,
+                              fontFamily: 'monospace',
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 1.5,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [themeColor, Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+
+                // Bottom Overlay panel containing Info & Buttons
+                Positioned(
+                  bottom: 30,
+                  left: 20,
+                  right: 20,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Creature Name
+                      Text(
+                        creature.getName(strings.languageCode).toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      Text(
+                        creature.scientificName.toUpperCase(),
+                        style: TextStyle(
+                          color: themeColor,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          fontFamily: 'monospace',
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Biometric HUD badges in a row
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildHudBadge(
+                            strings.languageCode == 'en' ? 'THREAT' : 'ĐE DỌA',
+                            isHighDanger ? 'APEX CLASS' : 'NORMAL',
+                            isHighDanger ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                          ),
+                          _buildHudBadge(
+                            strings.languageCode == 'en' ? 'DEPTH' : 'ĐỘ SÂU',
+                            '${creature.minDepth}m - ${creature.maxDepth}m',
+                            themeColor,
+                          ),
+                          _buildHudBadge(
+                            strings.languageCode == 'en' ? 'SIZE' : 'KÍCH THƯỚC',
+                            creature.getSizeHumanRatio(strings.languageCode).split(' ')[0],
+                            themeColor,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Faded description (Max 3 lines, highly readable and clean)
+                      Container(
+                        padding: const EdgeInsets.only(left: 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: themeColor.withValues(alpha: 0.4), width: 2),
+                          ),
+                        ),
+                        child: Text(
+                          creature.getDescription(strings.languageCode),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 11.5,
+                            height: 1.5,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Giant neon action button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _scannedCreature = null;
+                              _lockedBlip = null;
+                            });
+                            _regenerateMonsterBlips();
+                          },
+                          icon: const Icon(Icons.verified_user_outlined, color: Colors.black, size: 18),
+                          label: Text(
+                            strings.languageCode == 'en' ? 'CONFIRM & STORE FILE' : 'XÁC NHẬN & LƯU HỒ SƠ',
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                              fontFamily: 'monospace',
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: themeColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 8,
+                            shadowColor: themeColor.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -928,35 +919,31 @@ class _SonarScreenState extends State<SonarScreen>
     );
   }
 
-  Widget _buildBiometricRow(
-      IconData icon, String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        children: [
-          Icon(icon, color: color.withValues(alpha: 0.6), size: 14),
-          const SizedBox(width: 8),
-          Text(
-            '$label: ',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
+  Widget _buildHudBadge(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF030D1C).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace'),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(color: Colors.white30, fontWeight: FontWeight.bold),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-              ),
+            TextSpan(
+              text: value.toUpperCase(),
+              style: TextStyle(color: color, fontWeight: FontWeight.w900),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

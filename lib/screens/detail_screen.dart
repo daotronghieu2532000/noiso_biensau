@@ -23,6 +23,8 @@ class _DetailScreenState extends State<DetailScreen>
   late final AnimationController _scanController;
   bool _isPlayingCreatureSound = false;
   late SoundService _soundService;
+  int _mainTab = 0; // 0: Size Comparison, 1: Info/Dossier
+  int _infoSubTab = 0; // 0: Detection, 1: Behavior, 2: Rivals
 
   @override
   void initState() {
@@ -87,6 +89,12 @@ class _DetailScreenState extends State<DetailScreen>
         ? const Color(0xFFFF3366)
         : const Color(0xFF00F0FF);
     final strings = AppStrings.listen(context);
+    final bool isEn = strings.languageCode == 'en';
+    final String cleanDescription = widget.creature.getDescription(strings.languageCode).trim();
+    final List<String> paragraphs = cleanDescription.split('. ')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFF020813),
@@ -330,34 +338,206 @@ class _DetailScreenState extends State<DetailScreen>
                       fontStyle: FontStyle.italic,
                     ),
                   ),
-                  const SizedBox(height: 24.0),
+                  const SizedBox(height: 20.0),
 
-                  // Description/Cốt truyện rùng rợn
-                  Text(
-                    strings.languageCode == 'en' ? "FIELD EXPLORATION DOSSIER" : "NHẬT KÝ THÁM HIỂM THỰC ĐỊA",
-                    style: const TextStyle(
-                      color: Colors.white30,
-                      fontSize: 12.0,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
+                  // ── Sci-Fi Custom Tab Bar ──────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(4.0),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF030D1C).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: themeColor.withValues(alpha: 0.15),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildMainTabButton(
+                            label: isEn ? "SIZE COMPARISON" : "SO SÁNH KÍCH THƯỚC",
+                            isSelected: _mainTab == 0,
+                            onTap: () => setState(() {
+                              _mainTab = 0;
+                            }),
+                            themeColor: themeColor,
+                            icon: Icons.aspect_ratio_outlined,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildMainTabButton(
+                            label: isEn ? "FIELD DOSSIER" : "NHẬT KÝ THỰC ĐỊA",
+                            isSelected: _mainTab == 1,
+                            onTap: () => setState(() {
+                              _mainTab = 1;
+                            }),
+                            themeColor: themeColor,
+                            icon: Icons.folder_open_outlined,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12.0),
-                  StructuredDescriptionWidget(
-                    description: widget.creature.getDescription(strings.languageCode),
-                    themeColor: themeColor,
-                    compact: false,
-                  ),
-                  const SizedBox(height: 24.0),
+                  const SizedBox(height: 20.0),
 
-                  // Size comparison widget
-                  SizeComparisonWidget(
-                    humanSize: widget.creature.humanSizeMeters,
-                    creatureSize: widget.creature.creatureSizeMeters,
-                    creatureName: widget.creature.getName(strings.languageCode).split(
-                      ' (',
-                    )[0], // Extract main name without notes
-                    creatureImageUrl: widget.creature.imageUrl,
+                  // ── Animated Main Content Switcher ──────────────────
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (Widget child, Animation<double> animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.0, 0.04),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: _mainTab == 0
+                        ? KeyedSubtree(
+                            key: const ValueKey('size_comparison_main_tab'),
+                            child: SizeComparisonWidget(
+                              humanSize: widget.creature.humanSizeMeters,
+                              creatureSize: widget.creature.creatureSizeMeters,
+                              creatureName: widget.creature.getName(strings.languageCode).split(
+                                ' (',
+                              )[0],
+                              creatureImageUrl: widget.creature.imageUrl,
+                            ),
+                          )
+                        : KeyedSubtree(
+                            key: const ValueKey('dossier_main_tab'),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Sub-tab selectors
+                                if (paragraphs.isNotEmpty) ...[
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    physics: const BouncingScrollPhysics(),
+                                    child: Row(
+                                      children: List.generate(paragraphs.length, (idx) {
+                                        String label = "";
+                                        IconData subIcon;
+                                        if (idx == 0) {
+                                          label = isEn ? "DETECTION" : "PHÁT HIỆN";
+                                          subIcon = Icons.radar_outlined;
+                                        } else if (idx == 1) {
+                                          label = isEn ? "BEHAVIOR" : "TẬP TÍNH";
+                                          subIcon = Icons.psychology_outlined;
+                                        } else {
+                                          label = isEn ? "RIVALS" : "ĐỐI THỦ";
+                                          subIcon = Icons.shield_outlined;
+                                        }
+
+                                        final bool isSubSelected = _infoSubTab == idx;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(right: 10.0),
+                                          child: GestureDetector(
+                                            onTap: () => setState(() => _infoSubTab = idx),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 250),
+                                              curve: Curves.easeOutCubic,
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                                              decoration: BoxDecoration(
+                                                color: isSubSelected
+                                                    ? themeColor.withValues(alpha: 0.16)
+                                                    : const Color(0xFF030D1C).withValues(alpha: 0.45),
+                                                borderRadius: BorderRadius.circular(30),
+                                                border: Border.all(
+                                                  color: isSubSelected ? themeColor : themeColor.withValues(alpha: 0.12),
+                                                  width: 1.2,
+                                                ),
+                                                boxShadow: isSubSelected
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: themeColor.withValues(alpha: 0.08),
+                                                          blurRadius: 8,
+                                                          spreadRadius: 1,
+                                                        ),
+                                                      ]
+                                                    : null,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    subIcon,
+                                                    size: 12,
+                                                    color: isSubSelected ? themeColor : Colors.white30,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    label,
+                                                    style: TextStyle(
+                                                      color: isSubSelected ? themeColor : Colors.white54,
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontFamily: 'monospace',
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                  if (isSubSelected) ...[
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      width: 4,
+                                                      height: 4,
+                                                      decoration: BoxDecoration(
+                                                        color: themeColor,
+                                                        shape: BoxShape.circle,
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                            color: themeColor,
+                                                            blurRadius: 4,
+                                                            spreadRadius: 1,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                ],
+
+                                // Sub-content switcher
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 250),
+                                  switchInCurve: Curves.easeOutQuad,
+                                  switchOutCurve: Curves.easeInQuad,
+                                  transitionBuilder: (Widget child, Animation<double> animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0.0, 0.03),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: StructuredDescriptionWidget(
+                                    key: ValueKey('dossier_card_$_infoSubTab'),
+                                    description: widget.creature.getDescription(strings.languageCode),
+                                    themeColor: themeColor,
+                                    compact: false,
+                                    singleParagraphIndex: _infoSubTab,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 48.0),
                 ],
@@ -365,6 +545,70 @@ class _DetailScreenState extends State<DetailScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMainTabButton({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required Color themeColor,
+    required IconData icon,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: isSelected
+              ? LinearGradient(
+                  colors: [
+                    themeColor.withValues(alpha: 0.25),
+                    themeColor.withValues(alpha: 0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          border: Border.all(
+            color: isSelected ? themeColor.withValues(alpha: 0.7) : Colors.transparent,
+            width: 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: themeColor.withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? themeColor : Colors.white38,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? themeColor : Colors.white60,
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
