@@ -175,7 +175,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/The_BLOOP.mp3', 
  'Loài cá rồng sở hữu làn da đen tuyền hấp thụ hoàn toàn ánh sáng và hàm răng dài sắc nhọn đến mức không thể khép khít miệng lại được. Thói quen săn mồi của nó là nhấp nháy phát quang cơ quan dọ thân để thôi miên con mồi rồi tung đòn táp bất ngờ từ bóng đêm, thức ăn ưa thích là các loài cá con và giáp xác nhỏ phát sáng. Đối thủ - đối trọng sinh tồn cận kề của Cá Rồng Đen chính là Cá Vây Chân, cuộc cạnh tranh thức ăn vô cùng khốc liệt trong bóng tối vĩnh hằng.', 
  'A deep-sea dragon with pitch-black skin that absorbs all light and teeth so long it cannot close its mouth. It hunts by flashing photophores along its body to hypnotize prey before striking from the dark, feeding on small fish and bioluminescent crustaceans. Its chief rival is the Anglerfish, locked in a fierce battle for survival in the eternal night.', 
- 1),
+ 0),
 
 ('greenland_shark', 
  'Cá Mập Greenland', 
@@ -193,7 +193,7 @@ INSERT INTO `creatures` (
  '', 
  'Loài động vật có xương sống thọ nhất hành tinh di chuyển vô cùng chậm rãi dưới làn nước băng giá tăm tối cận cực bắc sâu thẳm. Thói quen săn mồi của nó là âm thầm áp sát tấn công những con hải cẩu đang ngủ dưới băng, thức ăn ưa thích là các loại cá tuyết và xác thối động vật chìm sâu. Đối thủ - đối trọng đáng gờm nhất của nó ở tầng mặt nước là loài Cá Voi Sát Thủ Bắc Cực, ép buộc nó phải chọn cách thích nghi sinh sống hoàn toàn dưới tầng nước lạnh buốt sâu thẳm.', 
  'The longest-lived vertebrate on Earth crawls slowly through freezing, dark waters near the polar depths. It hunts sleeping seals under the ice and scavenges sunken carcasses, moving at a glacial pace. Its greatest threat at the surface is the Arctic Orca, forcing it to live its entire life in the deep polar abyss.', 
- 1),
+ 0),
 
 ('kraken', 
  'Thủy Quái Kraken', 
@@ -229,7 +229,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/The_BLOOP.mp3', 
  'Thực thể sinh học khổng lồ vô danh ẩn mình phát ra sóng âm tần số siêu thấp lan rộng khắp Thái Bình Dương rộng lớn hàng ngàn cây số. Thói quen săn mồi của siêu quái vật này là nuốt chửng toàn bộ các đàn cá mập bằng chiếc miệng khổng lồ như hang động, thức ăn ưa thích là các loài cá voi xanh lớn nhất và mực khổng lồ. Đối thủ - đối trọng duy nhất tương xứng với tầm vóc khổng lồ phi thực tế của nó dưới lòng đại dương sâu thẳm chính là Đại Long Leviathan đang ngủ say đáy thẳm.', 
  'An unnamed colossal organic entity that emits ultra-low-frequency sound waves sweeping across thousands of miles of the Pacific. This super-predator consumes entire schools of sharks in its cavernous mouth, feeding on blue whales and giant squids. Its only rival in size and power is the sleeping Great Leviathan.', 
- 1),
+ 0),
 
 ('leviathan', 
  'Đại Long Leviathan', 
@@ -265,7 +265,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/sea_serpent.mp3', 
  'Ác mộng của những nhà hàng hải cổ đại, sinh vật dạng bò sát khổng lồ dài hơn trăm mét uốn lượn trong lòng biển sâu. Sống ẩn mình giữa các vực thẳm từ 1000m đến 6000m, thói quen săn mồi của nó là ngụy trang như một rặng núi đá đen rồi bất ngờ lao ra quấn siết con mồi đến nát vụn xương cốt trước khi nuốt chửng. Thức ăn ưa thích của Mãng Xà Biển là Mực Khổng Lồ và các loài cá voi đi lạc xuống tầng sâu. Đối thủ - đối trọng truyền kiếp của nó chính là Thủy Quái Kraken. Mỗi khi hai sinh vật huyền thoại này đụng độ, những vòng quấn nghẹt thở và những xúc tu đầy gai nhọn của chúng tạo ra những cơn chấn động và dòng hải lưu ngầm dữ dội làm chao đảo thềm lục địa.', 
  'The dread of ancient sailors, a massive reptilian creature stretching over a hundred meters. Living in abysses between 1,000m and 6,000m, it camouflages as a black ridge before constricting its prey. It feeds on giant squids and lost whales. Its eternal nemesis is the Kraken; their deadly battles leave tangled scars of suckers on the whale\'s skin.', 
- 1),
+ 0),
 
 ('cthulhu', 
  'Tà Thần Cthulhu', 
@@ -301,7 +301,7 @@ INSERT INTO `creatures` (
  '', 
  'Vua săn mồi đại dương thời tiền sử đã được tái hiện trong nhiều bộ phim và trò chơi điện tử nổi tiếng. Thói quen săn mồi của nó là lao vọt từ dưới đáy sâu với tốc độ kinh hoàng rồi dùng cú táp nghiền nát xương với lực cắn lên tới 18 tấn làm tê liệt mục tiêu. Thức ăn ưa thích của Megalodon là các loài cá voi tấm sừng lớn và rùa biển cổ đại. Đối thủ - đối trọng ngang sức duy nhất của nó chính là siêu quái vật Leviathan hoặc cá voi ăn thịt khổng lồ Livyatan melvillei tranh giành ngôi vương thống trị biển cả.', 
  'The prehistoric super-shark featured in popular films and video games. It hunts by rushing from the deep at terrifying speeds, striking with an 18-ton bite force to crush whale bones. It feeds on baleen whales and giant turtles. Its only rival is the Leviathan or the predatory Livyatan melvillei.', 
- 1),
+ 0),
 
 ('reaper_leviathan', 
  'Thủy Quái Reaper Leviathan', 
@@ -319,7 +319,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/reaper_leviathan.mp3', 
  'Cơn ác mộng kinh hoàng trong các trò chơi và bộ phim viễn tưởng về thám hiểm đại dương với tiếng gầm rú kinh tởm vang vọng từ khoảng cách xa. Sống tại các vùng nước nửa tối, thói quen săn mồi của nó là lén lút áp sát từ phía sau, dùng bốn chiếc sừng đỏ kẹp chặt rồi nuốt chửng cả thợ lặn lẫn tàu ngầm nhỏ. Thức ăn ưa thích của Reaper là bất kỳ sinh vật hoặc phương tiện nào đi lạc vào lãnh địa tuần tra của nó. Đối thủ - đối trọng nguy hiểm của nó chính là sinh vật giáp sắt cua biển khổng lồ hoặc Ghost Leviathan thống trị vùng nước sâu hơn.', 
  'A terrifying nightmare from sci-fi ocean exploration games and movies, whose ghastly roar echoes across vast distances. It stalks from behind in the twilight zone, pinning vessels with four red claws before consuming them. It feeds on anything entering its territory, and clashes with Ghost Leviathans.', 
- 1),
+ 0),
 
 ('jormungandr', 
  'Mãng Xà Thế Giới Jörmungandr', 
@@ -337,7 +337,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/lagiacrus.mp3', 
  'Mãng Xà Thế Giới khổng lồ trong thần thoại Bắc Âu cổ đại sở hữu kích thước khổng lồ quấn quanh Midgard — nguồn cảm hứng bất tận cho vô số bộ phim và trò chơi điện tử trên toàn thế giới. Thói quen của nó là nằm bất động cuộn quanh đáy biển sâu kiến tạo thềm địa chất, hơi thở của nó có thể phun độc cực mạnh ăn mòn vạn vật. Thức ăn ưa thích của nó là các loài quái vật biển khổng lồ cổ đại dưới rãnh sâu. Đối thủ - đối trọng định mệnh của Jörmungandr chính là thần sấm Thor, cuộc chiến cuối cùng giữa họ trong sự kiện Ragnarok được dự báo sẽ hủy diệt cả thế giới.', 
  'The Midgard Serpent from Norse mythology, wrapping around the entire world and inspiring countless games and films. It lies coiled at the bottom of the deep ocean, emitting toxic vapors that corrode all metals. It feeds on abyssal monsters. Its destined rival is Thor; their final battle during Ragnarok will destroy the world.', 
- 1),
+ 0),
 
 ('lagiacrus', 
  'Lôi Hải Long Lagiacrus', 
@@ -355,7 +355,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/lagiacrus.mp3', 
  'Chúa tể biển cả Lôi Hải Long huyền thoại sở hữu lớp vảy màu xanh đại dương phát điện cực mạnh — một trong những sinh vật truyền thuyết được yêu thích trong nhiều trò chơi và bộ phim viễn tưởng. Thói quen săn mồi của nó là tích tụ luồng điện cao thế phóng ra làm tê liệt cả một vùng biển lớn quanh mục tiêu trước khi xông tới cắn xé. Thức ăn ưa thích của Lagiacrus là đàn cá mập đại dương và các loài giáp xác khổng lồ dưới rạn san hô sâu. Đối thủ - đối trọng truyền kiếp của nó chính là rồng lửa thống trị bầu trời hoặc các thợ săn rồng huyền thoại luôn muốn đoạt lấy chiếc sừng sấm sét của nó.', 
  'The legendary Lord of the Seas clad in ocean-blue scales capable of releasing high-voltage electrical discharges. It hunts by discharging electricity to paralyze marine life in a large area before striking. It feeds on ocean sharks and giant crustaceans. Its rivals are dragons of the skies and legendary hunters.', 
- 1),
+ 0),
 
 ('ghost_leviathan', 
  'Thủy Quái Ghost Leviathan', 
@@ -373,7 +373,7 @@ INSERT INTO `creatures` (
  'https://codego.io.vn/api/uploads/sounds/leviathan_groan.mp3', 
  'Siêu thực thể phát quang trong suốt huyền bí từ các truyền thuyết và thế giới viễn tưởng, cư ngụ tại các vùng ranh giới hư vô tăm tối của đáy đại dương sâu thẳm. Thói quen săn mồi của nó là tuần tra ranh giới lãnh thổ một cách giận dữ, bất ngờ phóng ra tấn công trực diện từ bóng tối bằng cái đầu búa cứng cáp khi phát hiện rung động. Thức ăn ưa thích của nó là các loài giáp xác nhỏ phát sáng sinh sống quanh miệng núi lửa ngầm sâu thẳm. Đối thủ - đối trọng tự nhiên lớn nhất của nó chính là Reaper Leviathan tranh giành các vùng nước giao thoa hoặc giáp sắt cua ngầm Sea Dragon.', 
  'A majestic, bioluminescent translucent entity from deep-sea legends, dwelling at the edge of the void. It aggressively patrols its territory, launching head-on rams with its hammer-shaped head when detecting vibrations. It feeds on microscopic organisms and clashes with Reaper Leviathans.', 
- 1),
+ 0),
 
 ('godzilla', 
  'Vua Quái Thú Godzillaa', 

@@ -5,27 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/data_service.dart';
 import '../services/sound_service.dart';
 import '../l10n/app_strings.dart';
-
-class BattleVideo {
-  final String title;
-  final String titleEn;
-  final String description;
-  final String descriptionEn;
-  final String videoUrl;
-  final String thumbnailUrl;
-
-  const BattleVideo({
-    required this.title,
-    required this.titleEn,
-    required this.description,
-    required this.descriptionEn,
-    required this.videoUrl,
-    required this.thumbnailUrl,
-  });
-
-  String getTitle(String lang) => lang == 'en' ? titleEn : title;
-  String getDescription(String lang) => lang == 'en' ? descriptionEn : description;
-}
+import '../models/battle_video.dart';
 
 class VideoScreen extends StatefulWidget {
   const VideoScreen({super.key});
@@ -35,41 +15,6 @@ class VideoScreen extends StatefulWidget {
 }
 
 class _VideoScreenState extends State<VideoScreen> {
-  final List<BattleVideo> _videos = const [
-    BattleVideo(
-      title: 'Đại Chiến Thần Thoại: Kraken vs Megalodon',
-      titleEn: 'Mythical Clash: Kraken vs Megalodon',
-      description: 'Trận chiến kinh thiên động địa giữa vua xúc tu Kraken và siêu cá mập thời tiền sử Megalodon tại độ sâu 2,000m.',
-      descriptionEn: 'A titanic battle between the giant Kraken and the prehistoric Megalodon at 2,000m depth.',
-      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-underwater-light-beams-through-water-surface-41441-large.mp4',
-      thumbnailUrl: 'assets/images/creatures/kraken.png',
-    ),
-    BattleVideo(
-      title: 'Tà Thần Thức Tỉnh: Cthulhu vs Leviathan',
-      titleEn: 'Awakening of Cthulhu vs Leviathan',
-      description: 'Khi thực thể vũ trụ Cthulhu trỗi dậy từ R\'lyeh, đụng độ với vị vua tối cao của Vực thẳm Mariana - Leviathan.',
-      descriptionEn: 'As the cosmic Cthulhu rises from R\'lyeh, it clashes with the sovereign of the Mariana Trench - Leviathan.',
-      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-underwater-swimmer-with-a-flashlight-41434-large.mp4',
-      thumbnailUrl: 'assets/images/creatures/Cthulhu.png',
-    ),
-    BattleVideo(
-      title: 'Độ Sâu Cực Hạn: Godzilla vs Jörmungandr',
-      titleEn: 'Extreme Depths: Godzilla vs Jörmungandr',
-      description: 'Vua quái thú Godzilla giải phóng luồng hơi thở nguyên tử dưới đáy Thái Bình Dương đấu với Mãng Xà Thế Giới.',
-      descriptionEn: 'The King of Monsters Godzilla releases atomic breath against the World Serpent Jörmungandr under the Pacific.',
-      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-waves-crashing-in-the-ocean-1527-large.mp4',
-      thumbnailUrl: 'assets/images/creatures/Godzilla_2014.png',
-    ),
-    BattleVideo(
-      title: 'Bí Mật Tăm Tối: Mực Khổng Lồ Săn Mồi',
-      titleEn: 'Dark Secrets: Giant Squid Hunting',
-      description: 'Đoạn phim chân thực tái hiện khoảnh khắc Mực Khổng Lồ Architeuthis dux rình rập và săn đuổi con mồi cận đáy sâu.',
-      descriptionEn: 'Authentic documentary recreation of the Giant Squid Architeuthis dux hunting in the dark ocean.',
-      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-underwater-scuba-diver-explores-a-cave-41435-large.mp4',
-      thumbnailUrl: 'assets/images/creatures/giant_squid.png',
-    ),
-  ];
-
   DataService? _dataService;
   bool _wasLoading = false;
   bool _isSuccessDialogShown = false;
@@ -497,6 +442,7 @@ class _VideoScreenState extends State<VideoScreen> {
     final strings = AppStrings.of(context);
     final isVi = strings.languageCode == 'vi';
     final dataService = Provider.of<DataService>(context);
+    final videos = dataService.videos;
 
     return Scaffold(
       backgroundColor: const Color(0xFF010812),
@@ -601,11 +547,26 @@ class _VideoScreenState extends State<VideoScreen> {
 
                 // Videos List
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: _videos.length,
-                    itemBuilder: (context, index) {
-                      final video = _videos[index];
+                  child: dataService.isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00F0FF)),
+                          ),
+                        )
+                      : (videos.isEmpty
+                          ? Center(
+                              child: Text(
+                                isVi 
+                                    ? 'Không có kết nối mạng hoặc không có video.' 
+                                    : 'No network connection or no videos available.',
+                                style: const TextStyle(color: Colors.white54, fontSize: 13),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              itemCount: videos.length,
+                              itemBuilder: (context, index) {
+                                final video = videos[index];
                       return Container(
                         margin: const EdgeInsets.only(bottom: 20),
                         decoration: BoxDecoration(
@@ -730,7 +691,7 @@ class _VideoScreenState extends State<VideoScreen> {
                         ),
                       );
                     },
-                  ),
+                  )),
                 ),
               ],
             ),

@@ -7,10 +7,12 @@ import 'package:http/http.dart' as http;
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../models/creature.dart';
 import '../models/ocean.dart';
+import '../models/battle_video.dart';
 
 class DataService extends ChangeNotifier {
   List<Creature> _creatures = [];
   List<Ocean> _oceans = [];
+  List<BattleVideo> _videos = [];
   bool _isLoading = true;
   int _highScoreDepth = 0;
   bool _isPremiumUnlocked = false;
@@ -22,6 +24,7 @@ class DataService extends ChangeNotifier {
 
   List<Creature> get creatures => _creatures;
   List<Ocean> get oceans => _oceans;
+  List<BattleVideo> get videos => _videos;
   bool get isLoading => _isLoading;
   int get highScoreDepth => _highScoreDepth;
   bool get isPremiumUnlocked => _isPremiumUnlocked;
@@ -166,6 +169,31 @@ class DataService extends ChangeNotifier {
       final String oceanResponse = await rootBundle.loadString('assets/data/oceans.json');
       final List<dynamic> oceanData = json.decode(oceanResponse);
       _oceans = oceanData.map((jsonItem) => Ocean.fromJson(jsonItem)).toList();
+
+      // Load videos from API (with local fallback)
+      try {
+        final response = await http
+            .get(Uri.parse('https://codego.io.vn/api/get_videos.php'))
+            .timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final List<dynamic> videoData = json.decode(response.body);
+          _videos = videoData.map((jsonItem) => BattleVideo.fromJson(jsonItem)).toList();
+          if (kDebugMode) {
+            print("Successfully loaded ${_videos.length} videos from API.");
+          }
+        } else {
+          throw Exception("API returned status code ${response.statusCode}");
+        }
+      } catch (apiError) {
+        if (kDebugMode) {
+          print("API load failed for videos, falling back to local asset: $apiError");
+        }
+        // Fallback to local asset JSON
+        final String videoResponse = await rootBundle.loadString('assets/data/videos.json');
+        final List<dynamic> videoData = json.decode(videoResponse);
+        _videos = videoData.map((jsonItem) => BattleVideo.fromJson(jsonItem)).toList();
+      }
       
       // Load persistent data from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
