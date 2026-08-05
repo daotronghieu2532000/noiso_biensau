@@ -16,8 +16,12 @@ class DataService extends ChangeNotifier {
   bool _isLoading = true;
   int _highScoreDepth = 0;
   bool _isPremiumUnlocked = false;
+  bool _isPremiumMonthly = false; // gói hàng tháng
 
-  static const String premiumProductId = 'vn.io.codego.noisobiensau.premium_lifetime';
+  static const String premiumProductId =
+      'vn.io.codego.noisobiensau.premium_lifetimem';
+  static const String monthlyProductId =
+      'vn.io.codego.noisobiensau.premium_monthly';
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   bool _isPurchaseLoading = false;
@@ -28,6 +32,9 @@ class DataService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   int get highScoreDepth => _highScoreDepth;
   bool get isPremiumUnlocked => _isPremiumUnlocked;
+  bool get isPremiumMonthly => _isPremiumMonthly;
+  // Cả 2 gói đều có quyền lợi VIP như nhau
+  bool get hasAnyPremium => _isPremiumUnlocked || _isPremiumMonthly;
   bool get isPurchaseLoading => _isPurchaseLoading;
 
   DataService() {
@@ -36,7 +43,8 @@ class DataService extends ChangeNotifier {
   }
 
   void _initializeIap() {
-    final Stream<List<PurchaseDetails>> purchaseUpdated = _inAppPurchase.purchaseStream;
+    final Stream<List<PurchaseDetails>> purchaseUpdated =
+        _inAppPurchase.purchaseStream;
     _subscription = purchaseUpdated.listen(
       _listenToPurchaseUpdated,
       onDone: () => _subscription?.cancel(),
@@ -56,7 +64,9 @@ class DataService extends ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> _listenToPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) async {
+  Future<void> _listenToPurchaseUpdated(
+    List<PurchaseDetails> purchaseDetailsList,
+  ) async {
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
       if (purchaseDetails.status == PurchaseStatus.pending) {
         _isPurchaseLoading = true;
@@ -71,12 +81,18 @@ class DataService extends ChangeNotifier {
           }
         } else if (purchaseDetails.status == PurchaseStatus.purchased ||
             purchaseDetails.status == PurchaseStatus.restored) {
-          await unlockPremium();
-          _isPremiumUnlocked = true;
+          // Kiểm tra loại gói để xác định đây là lifetime hay monthly
+          final productId = purchaseDetails.productID;
+          if (productId == monthlyProductId) {
+            await unlockMonthlyPremium();
+          } else {
+            // lifetime hoặc bất kỳ gói nào khác
+            await unlockPremium();
+          }
           _isPurchaseLoading = false;
           notifyListeners();
         }
-        
+
         if (purchaseDetails.pendingCompletePurchase) {
           await _inAppPurchase.completePurchase(purchaseDetails);
         }
@@ -84,36 +100,72 @@ class DataService extends ChangeNotifier {
     }
   }
 
+  /// Mua gói Trọn đời (Non-consumable)
   Future<void> buyPremium() async {
     try {
       final bool isAvailable = await _inAppPurchase.isAvailable();
       if (!isAvailable) {
-        if (kDebugMode) {
-          print("Store is not available");
-        }
+        if (kDebugMode) print("Store is not available");
         return;
       }
 
       _isPurchaseLoading = true;
       notifyListeners();
 
-      final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails({premiumProductId});
-      if (response.notFoundIDs.contains(premiumProductId) || response.productDetails.isEmpty) {
-        if (kDebugMode) {
+      final ProductDetailsResponse response = await _inAppPurchase
+          .queryProductDetails({premiumProductId});
+      if (response.notFoundIDs.contains(premiumProductId) ||
+          response.productDetails.isEmpty) {
+        if (kDebugMode)
           print("Product ID not found in store: $premiumProductId");
-        }
         _isPurchaseLoading = false;
         notifyListeners();
         return;
       }
 
       final ProductDetails productDetails = response.productDetails.first;
-      final PurchaseParam purchaseParam = PurchaseParam(productDetails: productDetails);
+      final PurchaseParam purchaseParam = PurchaseParam(
+        productDetails: productDetails,
+      );
       await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
     } catch (e) {
-      if (kDebugMode) {
-        print("Error launching purchase: $e");
+      if (kDebugMode) print("Error launching purchase: $e");
+      _isPurchaseLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Mua gói Hàng tháng (Auto-renewable subscription)
+  Future<void> buyMonthly() async {
+    try {
+      final bool isAvailable = await _inAppPurchase.isAvailable();
+      if (!isAvailable) {
+        if (kDebugMode) print("Store is not available");
+        return;
       }
+
+      _isPurchaseLoading = true;
+      notifyListeners();
+
+      final ProductDetailsResponse response = await _inAppPurchase
+          .queryProductDetails({monthlyProductId});
+      if (response.notFoundIDs.contains(monthlyProductId) ||
+          response.productDetails.isEmpty) {
+        if (kDebugMode)
+          print("Product ID not found in store: $monthlyProductId");
+        _isPurchaseLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      final ProductDetails productDetails = response.productDetails.first;
+      final PurchaseParam purchaseParam = PurchaseParam(
+        productDetails: productDetails,
+      );
+      // Subscription dùng buyNonConsumable cho iOS, buyConsumable=false
+      await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
+    } catch (e) {
+      if (kDebugMode) print("Error launching monthly purchase: $e");
       _isPurchaseLoading = false;
       notifyListeners();
     }
@@ -146,9 +198,13 @@ class DataService extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           final List<dynamic> creatureData = json.decode(response.body);
-          _creatures = creatureData.map((jsonItem) => Creature.fromJson(jsonItem)).toList();
+          _creatures = creatureData
+              .map((jsonItem) => Creature.fromJson(jsonItem))
+              .toList();
           if (kDebugMode) {
-            print("Successfully loaded ${_creatures.length} creatures from API.");
+            print(
+              "Successfully loaded ${_creatures.length} creatures from API.",
+            );
           }
         } else {
           throw Exception("API returned status code ${response.statusCode}");
@@ -158,15 +214,21 @@ class DataService extends ChangeNotifier {
           print("API load failed, falling back to local asset: $apiError");
         }
         // Fallback to local asset JSON
-        final String creatureResponse = await rootBundle.loadString('assets/data/creatures.json');
+        final String creatureResponse = await rootBundle.loadString(
+          'assets/data/creatures.json',
+        );
         final List<dynamic> creatureData = json.decode(creatureResponse);
-        _creatures = creatureData.map((jsonItem) => Creature.fromJson(jsonItem)).toList();
+        _creatures = creatureData
+            .map((jsonItem) => Creature.fromJson(jsonItem))
+            .toList();
       }
 
       _creatures.sort((a, b) => a.minDepth.compareTo(b.minDepth));
 
       // Load oceans
-      final String oceanResponse = await rootBundle.loadString('assets/data/oceans.json');
+      final String oceanResponse = await rootBundle.loadString(
+        'assets/data/oceans.json',
+      );
       final List<dynamic> oceanData = json.decode(oceanResponse);
       _oceans = oceanData.map((jsonItem) => Ocean.fromJson(jsonItem)).toList();
 
@@ -178,7 +240,9 @@ class DataService extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           final List<dynamic> videoData = json.decode(response.body);
-          _videos = videoData.map((jsonItem) => BattleVideo.fromJson(jsonItem)).toList();
+          _videos = videoData
+              .map((jsonItem) => BattleVideo.fromJson(jsonItem))
+              .toList();
           if (kDebugMode) {
             print("Successfully loaded ${_videos.length} videos from API.");
           }
@@ -187,21 +251,28 @@ class DataService extends ChangeNotifier {
         }
       } catch (apiError) {
         if (kDebugMode) {
-          print("API load failed for videos, falling back to local asset: $apiError");
+          print(
+            "API load failed for videos, falling back to local asset: $apiError",
+          );
         }
         // Fallback to local asset JSON
-        final String videoResponse = await rootBundle.loadString('assets/data/videos.json');
+        final String videoResponse = await rootBundle.loadString(
+          'assets/data/videos.json',
+        );
         final List<dynamic> videoData = json.decode(videoResponse);
-        _videos = videoData.map((jsonItem) => BattleVideo.fromJson(jsonItem)).toList();
+        _videos = videoData
+            .map((jsonItem) => BattleVideo.fromJson(jsonItem))
+            .toList();
       }
-      
+
       // Load persistent data from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       _highScoreDepth = prefs.getInt('high_score_depth') ?? 0;
       _isPremiumUnlocked = prefs.getBool('is_premium_unlocked') ?? false;
-      
+      _isPremiumMonthly = prefs.getBool('is_premium_monthly') ?? false;
+
       for (var creature in _creatures) {
-        if (_isPremiumUnlocked) {
+        if (_isPremiumUnlocked || _isPremiumMonthly) {
           creature.isLocked = false;
         } else {
           final isUnlocked = prefs.getBool('unlocked_${creature.id}');
@@ -215,7 +286,6 @@ class DataService extends ChangeNotifier {
           }
         }
       }
-      
     } catch (e) {
       if (kDebugMode) {
         print("Error loading data: $e");
@@ -237,7 +307,7 @@ class DataService extends ChangeNotifier {
     if (index != -1) {
       _creatures[index].isLocked = false;
       notifyListeners();
-      
+
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('unlocked_$id', true);
@@ -254,7 +324,7 @@ class DataService extends ChangeNotifier {
     if (depth > _highScoreDepth) {
       _highScoreDepth = depth;
       notifyListeners();
-      
+
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('high_score_depth', depth);
@@ -266,26 +336,61 @@ class DataService extends ChangeNotifier {
     }
   }
 
-  // Unlock lifetime premium package
+  /// Mở khóa gói Trọn đời (lưu vĩnh viễn)
   Future<void> unlockPremium() async {
     _isPremiumUnlocked = true;
+    _isPremiumMonthly = false; // lifetime bao gồm cả monthly
     for (var creature in _creatures) {
       creature.isLocked = false;
     }
     notifyListeners();
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_premium_unlocked', true);
-      
-      // Save unlock state for all creatures to SharedPreferences too
+      await prefs.setBool('is_premium_monthly', false);
       for (var creature in _creatures) {
         await prefs.setBool('unlocked_${creature.id}', true);
       }
     } catch (e) {
-      if (kDebugMode) {
-        print("Error saving premium unlock: $e");
+      if (kDebugMode) print("Error saving premium unlock: $e");
+    }
+  }
+
+  /// Mở khóa gói Hàng tháng (lưu tạm, có thể hết hạn)
+  Future<void> unlockMonthlyPremium() async {
+    _isPremiumMonthly = true;
+    for (var creature in _creatures) {
+      creature.isLocked = false;
+    }
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_premium_monthly', true);
+      for (var creature in _creatures) {
+        await prefs.setBool('unlocked_${creature.id}', true);
       }
+    } catch (e) {
+      if (kDebugMode) print("Error saving monthly premium unlock: $e");
+    }
+  }
+
+  /// Huỷ gói monthly (khi subscription hết hạn hoặc bị huỷ)
+  Future<void> revokeMonthlyPremium() async {
+    _isPremiumMonthly = false;
+    // Chỉ revoke quái thú nếu không có lifetime
+    if (!_isPremiumUnlocked) {
+      for (var creature in _creatures) {
+        if (creature.type == 'myth') creature.isLocked = true;
+      }
+    }
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_premium_monthly', false);
+    } catch (e) {
+      if (kDebugMode) print("Error revoking monthly premium: $e");
     }
   }
 }

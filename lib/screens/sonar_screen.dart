@@ -173,8 +173,10 @@ class _SonarScreenState extends State<SonarScreen>
       _scannedCreature = null;
     });
 
-    // 800ms rapid capture/lock animation
-    const duration = Duration(milliseconds: 800);
+    // 800ms (or 400ms if premium) rapid capture/lock animation
+    final dataService = Provider.of<DataService>(context, listen: false);
+    final isPremium = dataService.hasAnyPremium;
+    final duration = Duration(milliseconds: isPremium ? 400 : 800);
     const interval = Duration(milliseconds: 40);
     int elapsed = 0;
 

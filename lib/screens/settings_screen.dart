@@ -136,7 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           final isVi = strings.languageCode == 'vi';
                           final dataService = Provider.of<DataService>(context);
                           final soundService = Provider.of<SoundService>(context);
-                          final isPremium = dataService.isPremiumUnlocked;
+                          final isPremium = dataService.hasAnyPremium;
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

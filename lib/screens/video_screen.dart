@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,6 +16,26 @@ class VideoScreen extends StatefulWidget {
 }
 
 class _VideoScreenState extends State<VideoScreen> {
+  String? _backgroundImage;
+
+  final List<String> _bgImages = const [
+    'assets/images/creatures/banner2.jpeg',
+    'assets/images/creatures/banner1.jpg',
+    'assets/images/creatures/ocean_atlantic.png',
+    'assets/images/creatures/ocean_indian.png',
+    'assets/images/creatures/ocean_pacific.png',
+    'assets/images/creatures/ocean_southern.png',
+    'assets/images/creatures/ocean_arctic.png',
+    'assets/images/creatures/bg_bermuda.jpeg',
+    'assets/images/creatures/bg_dark_abyss.jpeg',
+    'assets/images/creatures/bg_deep_ocean.jpeg',
+    'assets/images/creatures/bg_ghost_ship.jpeg',
+    'assets/images/creatures/bg_giant_squid.jpeg',
+    'assets/images/creatures/bg_kraken.jpeg',
+    'assets/images/creatures/bg_research_sub.jpeg',
+    'assets/images/creatures/bg_shark.jpeg',
+  ];
+
   DataService? _dataService;
   bool _wasLoading = false;
   bool _isSuccessDialogShown = false;
@@ -23,6 +44,7 @@ class _VideoScreenState extends State<VideoScreen> {
   @override
   void initState() {
     super.initState();
+    _backgroundImage = _bgImages[math.Random().nextInt(_bgImages.length)];
     // Mute ambient sound when entering video screen to avoid noise clash
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SoundService>(context, listen: false).stopAmbient();
@@ -55,7 +77,7 @@ class _VideoScreenState extends State<VideoScreen> {
       _wasLoading = false;
       Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
       
-      if (dataService.isPremiumUnlocked && !_isSuccessDialogShown) {
+      if (dataService.hasAnyPremium && !_isSuccessDialogShown) {
         _isSuccessDialogShown = true;
         _showSuccessDialog();
       }
@@ -191,6 +213,7 @@ class _VideoScreenState extends State<VideoScreen> {
   void _showVipUnlockBottomSheet(BuildContext context, VoidCallback onPurchaseSuccess) {
     final strings = AppStrings.of(context);
     final isVi = strings.languageCode == 'vi';
+    int selectedPlan = 0; // 0 = trọn đời, 1 = hàng tháng
 
     showModalBottomSheet(
       context: context,
@@ -202,208 +225,385 @@ class _VideoScreenState extends State<VideoScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3), width: 1.5),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF071224), Color(0xFF020710)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+            return SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  border: Border.all(
+                    color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF071224), Color(0xFF020710)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
                 ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // VIP App Icon Glow
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          spreadRadius: 2,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // App Icon
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                        border: Border.all(color: const Color(0xFF00F0FF), width: 2),
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/creatures/icon.jpeg',
+                          fit: BoxFit.cover,
                         ),
-                      ],
-                      border: Border.all(color: const Color(0xFF00F0FF), width: 2),
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/creatures/icon.jpeg',
-                        fit: BoxFit.cover,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Title
-                  Text(
-                    isVi ? 'KÍCH HOẠT THÀNH VIÊN VIP' : 'ACTIVATE VIP MEMBERSHIP',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                      shadows: [
-                        Shadow(color: Color(0xFF00F0FF), blurRadius: 10),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isVi 
-                      ? 'Mở khóa toàn bộ đặc quyền trọn đời chỉ với 1 lần thanh toán' 
-                      : 'Unlock all premium lifetime privileges with a single purchase',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const Divider(color: Color(0xFF00F0FF), height: 32, thickness: 0.5),
+                    const SizedBox(height: 12),
 
-                  // Perks List
-                  _buildPerkRow(
-                    isVi ? 'Xem không giới hạn toàn bộ Video Chiến đấu Quái thú Vực sâu' : 'Watch unlimited high-quality Deep-Sea Battle Videos',
-                    true,
-                  ),
-                  const SizedBox(height: 14),
-                  _buildPerkRow(
-                    isVi ? 'Mở khóa toàn bộ Thủy quái VIP (Kraken, Leviathan, Cthulhu, Godzilla...)' : 'Unlock all VIP creatures (Kraken, Leviathan, Cthulhu, Godzilla...)',
-                    true,
-                  ),
-                  const SizedBox(height: 14),
-                  _buildPerkRow(
-                    isVi ? 'Nâng cấp radar Sonar quét quái thú nhanh hơn gấp 2 lần' : 'Upgrade Sonar radar performance to scan creatures 2x faster',
-                    true,
-                  ),
-                  const SizedBox(height: 14),
-                  _buildPerkRow(
-                    isVi ? 'Không bao giờ xuất hiện quảng cáo làm gián đoạn' : 'Completely Ad-Free premium app experience forever',
-                    true,
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Lifetime price
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00F0FF).withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.15)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isVi ? 'Mức giá một lần mua:' : 'One-time Price:',
-                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          isVi ? '\$1.99 Trọn đời' : '\$1.99 Lifetime',
-                          style: const TextStyle(
-                            color: Color(0xFF00F0FF),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Purchase and Restore buttons row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 40,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF00F0FF),
-                              side: const BorderSide(color: Color(0xFF00F0FF), width: 1.2),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: EdgeInsets.zero,
-                            ),
-                            onPressed: () {
-                              _onPurchaseSuccessCallback = onPurchaseSuccess;
-                              Navigator.pop(context); // Close sheet
-                              Provider.of<DataService>(context, listen: false).restorePurchases();
-                            },
-                            child: Text(
-                              isVi ? 'KHÔI PHỤC' : 'RESTORE',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SizedBox(
-                          height: 40,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00F0FF),
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              elevation: 4,
-                              shadowColor: const Color(0xFF00F0FF).withValues(alpha: 0.3),
-                              padding: EdgeInsets.zero,
-                            ),
-                            onPressed: () {
-                              _onPurchaseSuccessCallback = onPurchaseSuccess;
-                              Navigator.pop(context); // Close sheet
-                              Provider.of<DataService>(context, listen: false).buyPremium();
-                            },
-                            child: Text(
-                              isVi ? 'MỞ KHÓA (\$1.99)' : 'UNLOCK (\$1.99)',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Privacy Policy link
-                  GestureDetector(
-                    onTap: () async {
-                      final url = Uri.parse('https://codego.io.vn/privacy_policy.html');
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(url, mode: LaunchMode.externalApplication);
-                      } 
-                    },
-                    child: Text(
-                      isVi ? 'Chính sách bảo mật' : 'Privacy Policy',
+                    // Title
+                    Text(
+                      isVi ? 'KÍCH HOẠT THÀNH VIÊN VIP' : 'ACTIVATE VIP MEMBERSHIP',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
-                        decoration: TextDecoration.underline,
-                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                        shadows: [Shadow(color: Color(0xFF00F0FF), blurRadius: 10)],
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      isVi
+                          ? 'Chọn gói phù hợp để mở toàn bộ đặc quyền VIP'
+                          : 'Choose a plan to unlock all premium privileges',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                    const Divider(color: Color(0xFF00F0FF), height: 24, thickness: 0.5),
+
+                    // --- Quyền lợi chung cả 2 gói ---
+                    _buildSectionTitle(
+                      isVi ? '🎁 Quyền lợi VIP (áp dụng cho cả 2 gói)' : '🎁 VIP Benefits (both plans)',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPerkRow(
+                      isVi
+                          ? '📺 Xem không giới hạn toàn bộ Video chiến đấu Quái thú Vực Sâu sắc nét'
+                          : '📺 Unlimited access to all Deep-Sea Creature Battle Videos in HD',
+                      true,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPerkRow(
+                      isVi
+                          ? '🔓 Mở khóa toàn bộ Thủy quái VIP hiện có (Kraken, Leviathan, Cthulhu, Godzilla...)'
+                          : '🔓 Unlock all current VIP Creatures (Kraken, Leviathan, Cthulhu, Godzilla...)',
+                      true,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPerkRow(
+                      isVi
+                          ? '🔮 Liên tục cập nhật thêm Video chiến đấu mới & Quái thú mới trong tương lai'
+                          : '🔮 Continuously updated with new Battle Videos & new Creatures in the future',
+                      true,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPerkRow(
+                      isVi
+                          ? '⚡ Nâng cấp radar Sonar quét quái thú nhanh hơn gấp 2 lần'
+                          : '⚡ Sonar radar upgraded to scan creatures 2x faster',
+                      true,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPerkRow(
+                      isVi
+                          ? '🚫 Trải nghiệm hoàn toàn không có quảng cáo gián đoạn'
+                          : '🚫 Completely Ad-Free premium app experience',
+                      true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // --- Chọn gói ---
+                    _buildSectionTitle(isVi ? '💳 Chọn gói của bạn' : '💳 Choose Your Plan'),
+                    const SizedBox(height: 10),
+
+                    // Gói Trọn đời
+                    GestureDetector(
+                      onTap: () => setModalState(() => selectedPlan = 0),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selectedPlan == 0
+                                ? const Color(0xFF00F0FF)
+                                : const Color(0xFF00F0FF).withValues(alpha: 0.2),
+                            width: selectedPlan == 0 ? 2 : 1,
+                          ),
+                          color: selectedPlan == 0
+                              ? const Color(0xFF00F0FF).withValues(alpha: 0.08)
+                              : Colors.transparent,
+                        ),
+                        child: Row(
+                          children: [
+                            // Radio indicator
+                            Container(
+                              width: 20, height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF00F0FF), width: 2),
+                                color: selectedPlan == 0 ? const Color(0xFF00F0FF) : Colors.transparent,
+                              ),
+                              child: selectedPlan == 0
+                                  ? const Icon(Icons.check, size: 12, color: Colors.black)
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        isVi ? 'Trọn đời' : 'Lifetime',
+                                        style: TextStyle(
+                                          color: selectedPlan == 0
+                                              ? const Color(0xFF00F0FF)
+                                              : Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFD700).withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: const Color(0xFFFFD700).withValues(alpha: 0.6),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          isVi ? 'GIÁ TỐT NHẤT' : 'BEST VALUE',
+                                          style: const TextStyle(
+                                            color: Color(0xFFFFD700),
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    isVi
+                                        ? 'Trả một lần, dùng mãi mãi. Mở khóa vĩnh viễn tất cả nội dung hiện tại & trong tương lai.'
+                                        : 'Pay once, keep forever. Permanently unlocks all current & future content.',
+                                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              r'$3.99',
+                              style: TextStyle(
+                                color: selectedPlan == 0 ? const Color(0xFF00F0FF) : Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Gói Hàng tháng
+                    GestureDetector(
+                      onTap: () => setModalState(() => selectedPlan = 1),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selectedPlan == 1
+                                ? const Color(0xFF00F0FF)
+                                : const Color(0xFF00F0FF).withValues(alpha: 0.2),
+                            width: selectedPlan == 1 ? 2 : 1,
+                          ),
+                          color: selectedPlan == 1
+                              ? const Color(0xFF00F0FF).withValues(alpha: 0.08)
+                              : Colors.transparent,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 20, height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF00F0FF), width: 2),
+                                color: selectedPlan == 1 ? const Color(0xFF00F0FF) : Colors.transparent,
+                              ),
+                              child: selectedPlan == 1
+                                  ? const Icon(Icons.check, size: 12, color: Colors.black)
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isVi ? 'Hàng tháng' : 'Monthly',
+                                    style: TextStyle(
+                                      color: selectedPlan == 1 ? const Color(0xFF00F0FF) : Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    isVi
+                                        ? 'Gia hạn tự động mỗi tháng. Huỷ bất cứ lúc nào. Thích hợp trải nghiệm trước khi chọn trọn đời.'
+                                        : 'Auto-renews monthly. Cancel anytime. Great for trying before going lifetime.',
+                                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  r'$0.99',
+                                  style: TextStyle(
+                                    color: selectedPlan == 1 ? const Color(0xFF00F0FF) : Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  isVi ? '/tháng' : '/mo',
+                                  style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Nút Mua + Khôi phục
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 42,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF00F0FF),
+                                side: const BorderSide(color: Color(0xFF00F0FF), width: 1.2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                              onPressed: () {
+                                _onPurchaseSuccessCallback = onPurchaseSuccess;
+                                Navigator.pop(context);
+                                Provider.of<DataService>(context, listen: false).restorePurchases();
+                              },
+                              child: Text(
+                                isVi ? 'KHÔI PHỤC' : 'RESTORE',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 42,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00F0FF),
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                elevation: 4,
+                                shadowColor: const Color(0xFF00F0FF).withValues(alpha: 0.3),
+                                padding: EdgeInsets.zero,
+                              ),
+                              onPressed: () {
+                                _onPurchaseSuccessCallback = onPurchaseSuccess;
+                                Navigator.pop(context);
+                                final ds = Provider.of<DataService>(context, listen: false);
+                                if (selectedPlan == 0) {
+                                  ds.buyPremium();
+                                } else {
+                                  ds.buyMonthly();
+                                }
+                              },
+                              child: Text(
+                                selectedPlan == 0
+                                    ? (isVi ? r'TRỌN ĐỜI (\$3.99)' : 'LIFETIME (\$3.99)')
+                                    : (isVi ? r'ĐĂNG KÝ (\$0.99/tháng)' : 'SUBSCRIBE (\$0.99/mo)'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 2 nút chính sách
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildPolicyButton(
+                          label: isVi ? 'Chính sách bảo mật' : 'Privacy Policy',
+                          url: 'https://codego.io.vn/privacy_policy.html',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildPolicyButton(
+                          label: 'Apple EULA',
+                          url: 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             );
           },
@@ -412,6 +612,47 @@ class _VideoScreenState extends State<VideoScreen> {
     );
   }
 
+  Widget _buildPolicyButton({required String label, required String url}) {
+    return GestureDetector(
+      onTap: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String text) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
 
   Widget _buildPerkRow(String text, bool isChecked) {
     return Row(
@@ -448,12 +689,27 @@ class _VideoScreenState extends State<VideoScreen> {
       backgroundColor: const Color(0xFF010812),
       body: Stack(
         children: [
-          // Cyber gradient background
+          // 1. Random background image
+          if (_backgroundImage != null)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.25,
+                child: Image.asset(
+                  _backgroundImage!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          // 2. Abyssal dark overlay / Cyber gradient background
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF010A18), Color(0xFF03142B), Color(0xFF010812)],
+                  colors: [
+                    const Color(0xFF010A18).withValues(alpha: 0.8),
+                    const Color(0xFF03142B).withValues(alpha: 0.85),
+                    const Color(0xFF010812).withValues(alpha: 0.9),
+                  ],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -511,7 +767,7 @@ class _VideoScreenState extends State<VideoScreen> {
                       ),
                       
                       // VIP tag if unlocked
-                      if (dataService.isPremiumUnlocked)
+                      if (dataService.hasAnyPremium)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
@@ -612,7 +868,7 @@ class _VideoScreenState extends State<VideoScreen> {
                                 ),
                                 
                                 // Lock overlay if not VIP
-                                if (!dataService.isPremiumUnlocked)
+                                if (!dataService.hasAnyPremium)
                                   Positioned(
                                     top: 12,
                                     right: 12,
@@ -632,7 +888,7 @@ class _VideoScreenState extends State<VideoScreen> {
 
                                 // Play Button Icon Overlay
                                 GestureDetector(
-                                  onTap: () => _playVideo(video, dataService.isPremiumUnlocked),
+                                  onTap: () => _playVideo(video, dataService.hasAnyPremium),
                                   child: Container(
                                     width: 58,
                                     height: 58,
