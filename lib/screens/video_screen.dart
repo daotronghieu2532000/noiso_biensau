@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'dart:math' as math;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -789,17 +790,7 @@ class _VideoScreenState extends State<VideoScreen> {
                   ),
                 ),
                 
-                // Header description
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: Text(
-                    isVi 
-                      ? 'Xem cuộc đụng độ khốc liệt của những kẻ thống trị đại dương sâu thẳm.'
-                      : 'Witness fierce clashes between the supreme rulers of the dark abyss.',
-                    style: const TextStyle(color: Colors.white60, fontSize: 13),
-                  ),
-                ),
-                const SizedBox(height: 12),
+
 
                 // Videos List
                 Expanded(
@@ -1170,39 +1161,58 @@ class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderS
                 ),
               ),
 
-              // 5. Glitch warning banner if locked
+              // 5. Glitch warning banner if locked (glassmorphic transparency)
               if (!widget.hasPremium)
                 Positioned.fill(
                   child: Center(
-                    child: Container(
-                      width: double.infinity,
-                      height: 52,
-                      color: const Color(0xFFFF0055).withValues(alpha: 0.85),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            isVi ? '[ CẢNH BÁO: TÍN HIỆU ĐÃ MÃ HÓA ]' : '[ WARNING: VIP SIGNAL ENCRYPTED ]',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'monospace',
-                              letterSpacing: 1.5,
+                    child: ClipRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+                        child: Container(
+                          width: double.infinity,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF0055).withValues(alpha: 0.15),
+                            border: const Border.symmetric(
+                              horizontal: BorderSide(
+                                color: Color(0xFFFF0055),
+                                width: 1.5,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isVi ? 'KÍCH HOẠT VIP ĐỂ GIẢI MÃ' : 'DECRYPT VIA VIP MEMBERSHIP',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                isVi ? '[ CẢNH BÁO: TÍN HIỆU ĐÃ MÃ HÓA ]' : '[ WARNING: VIP SIGNAL ENCRYPTED ]',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'monospace',
+                                  letterSpacing: 1.5,
+                                  shadows: [
+                                    Shadow(
+                                      color: Color(0xFFFF0055),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                isVi ? 'KÍCH HOẠT VIP ĐỂ GIẢI MÃ' : 'DECRYPT VIA VIP MEMBERSHIP',
+                                style: const TextStyle(
+                                  color: Color(0xFFFF0055),
+                                  fontSize: 9,
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
