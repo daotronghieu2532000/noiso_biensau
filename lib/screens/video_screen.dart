@@ -819,7 +819,7 @@ class _VideoScreenState extends State<VideoScreen> {
                               ),
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              padding: const EdgeInsets.only(top: 8, bottom: 24),
                               itemCount: videos.length,
                               itemBuilder: (context, index) {
                                 final video = videos[index];
@@ -1073,176 +1073,35 @@ class _VipVideoCard extends StatefulWidget {
 }
 
 class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
+  late AnimationController _animationController;
   bool _isPressed = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
+    _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 3),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-
-    final title = widget.video.getTitle(widget.languageCode);
+    final isVi = widget.languageCode == 'vi';
+    final title = widget.video.getTitle(widget.languageCode).toUpperCase();
     final desc = widget.video.getDescription(widget.languageCode);
-
-    final isEven = widget.index % 2 == 0;
-    
-    // Asymmetric cyberpunk card corners
-    final cardRadius = isEven
-        ? const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            bottomRight: Radius.circular(24),
-          )
-        : const BorderRadius.only(
-            topRight: Radius.circular(24),
-            bottomLeft: Radius.circular(24),
-          );
-
     final accentColor = widget.hasPremium
         ? const Color(0xFF00F0FF)
         : const Color(0xFFFF0055);
 
-    // Dynamic coordinates & sonar signals
-    final List<String> mockCoords = [
-      'SECTOR A-01 // LAT 24.5° N // DEP 2,000M',
-      'SECTOR B-03 // LAT 11.2° N // DEP 8,500M',
-      'SECTOR C-09 // LAT 35.8° S // DEP 6,000M',
-      'SECTOR D-12 // LAT 15.1° N // DEP 1,200M',
-      'SECTOR E-04 // LAT 08.4° S // DEP 4,500M',
-      'SECTOR F-07 // LAT 42.1° N // DEP 3,100M',
-    ];
-    final coordText = mockCoords[widget.index % mockCoords.length];
-
-    final portalWidget = Stack(
-      alignment: Alignment.center,
-      children: [
-        // Submarine Viewport / Sonar Radar Sweep Animation
-        SizedBox(
-          width: 104,
-          height: 104,
-          child: CustomPaint(
-            painter: _RadarRingPainter(
-              angle: _pulseController.value,
-              color: accentColor,
-            ),
-          ),
-        ),
-        // Creature Thumbnail Viewport
-        Container(
-          width: 84,
-          height: 84,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-          ),
-          child: ClipOval(
-            child: Image.asset(
-              widget.video.thumbnailUrl,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-        // Dark Vignette/Tint Screen
-        Container(
-          width: 84,
-          height: 84,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.black.withValues(alpha: widget.hasPremium ? 0.35 : 0.65),
-          ),
-        ),
-        // Lock / Sonar Play Button Overlay
-        if (!widget.hasPremium)
-          const Icon(
-            Icons.lock_rounded,
-            color: Color(0xFFFF0055),
-            size: 24,
-          )
-        else
-          ScaleTransition(
-            scale: Tween<double>(begin: 0.95, end: 1.05).animate(
-              CurvedAnimation(
-                parent: _pulseController,
-                curve: Curves.easeInOut,
-              ),
-            ),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black.withValues(alpha: 0.7),
-                border: Border.all(color: const Color(0xFF00F0FF), width: 1.5),
-              ),
-              child: const Icon(
-                Icons.play_arrow_rounded,
-                color: Color(0xFF00F0FF),
-                size: 24,
-              ),
-            ),
-          ),
-      ],
-    );
-
-    final infoWidget = Expanded(
-      child: Column(
-        crossAxisAlignment: isEven ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Cyber Sector & Coordinate details
-          Text(
-            coordText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: accentColor.withValues(alpha: 0.7),
-              fontSize: 9,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 5),
-          // Title
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: isEven ? TextAlign.left : TextAlign.right,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(height: 5),
-          // Description
-          Text(
-            desc,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: isEven ? TextAlign.left : TextAlign.right,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 11,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
+    final String camId = 'CAM_0${widget.index + 1}';
+    final String depthText = '${1200 + (widget.index * 1350)}M';
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
@@ -1251,51 +1110,206 @@ class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderS
         widget.onTap();
       },
       onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: cardRadius,
-            border: Border.all(
-              color: accentColor.withValues(alpha: _isPressed ? 0.45 : 0.18),
-              width: 1.2,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          border: Border.symmetric(
+            horizontal: BorderSide(
+              color: accentColor.withValues(alpha: _isPressed ? 0.8 : 0.3),
+              width: 1.5,
             ),
-            gradient: LinearGradient(
-              colors: isEven
-                  ? [
-                      const Color(0xFF041021).withValues(alpha: 0.8),
-                      const Color(0xFF020712).withValues(alpha: 0.4),
-                    ]
-                  : [
-                      const Color(0xFF020712).withValues(alpha: 0.4),
-                      const Color(0xFF041021).withValues(alpha: 0.8),
+          ),
+        ),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Stack(
+            children: [
+              // 1. Full-bleed Widescreen Thumbnail
+              Positioned.fill(
+                child: Image.asset(
+                  widget.video.thumbnailUrl,
+                  fit: BoxFit.cover,
+                ),
+              ),
+
+              // 2. Scanline vignette
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: 0.7),
+                        Colors.black.withValues(alpha: 0.3),
+                        Colors.black.withValues(alpha: 0.85),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ),
+
+              // 3. Cyber Scanline Grid
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.12,
+                  child: CustomPaint(
+                    painter: _ScopeGridPainter(color: accentColor),
+                  ),
+                ),
+              ),
+
+              // 4. HUD Telemetry & Brackets
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _HudScopePainter(
+                    color: accentColor,
+                    angle: _animationController.value,
+                    isLocked: !widget.hasPremium,
+                  ),
+                ),
+              ),
+
+              // 5. Glitch warning banner if locked
+              if (!widget.hasPremium)
+                Positioned.fill(
+                  child: Center(
+                    child: Container(
+                      width: double.infinity,
+                      height: 52,
+                      color: const Color(0xFFFF0055).withValues(alpha: 0.85),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            isVi ? '[ CẢNH BÁO: TÍN HIỆU ĐÃ MÃ HÓA ]' : '[ WARNING: VIP SIGNAL ENCRYPTED ]',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'monospace',
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isVi ? 'KÍCH HOẠT VIP ĐỂ GIẢI MÃ' : 'DECRYPT VIA VIP MEMBERSHIP',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 6. Cam status tag
+              Positioned(
+                top: 12,
+                left: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  color: Colors.black.withValues(alpha: 0.75),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: widget.hasPremium ? const Color(0xFF00FF66) : const Color(0xFFFF0055),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$camId // DEPTH: $depthText',
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
                     ],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: accentColor.withValues(alpha: _isPressed ? 0.15 : 0.03),
-                blurRadius: 10,
+                  ),
+                ),
+              ),
+
+              // 7. Information Bottom Bar (Full-Width, sharp)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.85),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 28,
+                        color: accentColor,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              desc,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (widget.hasPremium)
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFF00F0FF), width: 1.5),
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Color(0xFF00F0FF),
+                            size: 20,
+                          ),
+                        )
+                      else
+                        const Icon(
+                          Icons.lock_outline_rounded,
+                          color: Color(0xFFFF0055),
+                          size: 20,
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ],
-          ),
-          child: Row(
-            children: isEven
-                ? [
-                    portalWidget,
-                    const SizedBox(width: 16),
-                    infoWidget,
-                  ]
-                : [
-                    infoWidget,
-                    const SizedBox(width: 16),
-                    portalWidget,
-                  ],
           ),
         ),
       ),
@@ -1303,60 +1317,84 @@ class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderS
   }
 }
 
-class _RadarRingPainter extends CustomPainter {
-  final double angle;
+class _ScopeGridPainter extends CustomPainter {
   final Color color;
-
-  _RadarRingPainter({required this.angle, required this.color});
+  _ScopeGridPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-
     final paint = Paint()
-      ..color = color.withValues(alpha: 0.3)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
+      ..color = color.withValues(alpha: 0.15)
+      ..strokeWidth = 0.5;
 
-    // Draw outer radar boundary
-    canvas.drawCircle(center, radius, paint);
-    
-    // Draw inner border rim
-    canvas.drawCircle(center, radius - 8, paint..color = color.withValues(alpha: 0.15));
-
-    // Draw compass degree markers (ticks)
-    final tickPaint = Paint()
-      ..color = color.withValues(alpha: 0.4)
-      ..strokeWidth = 1.0;
-    
-    for (int i = 0; i < 360; i += 30) {
-      final rad = i * math.pi / 180;
-      final start = Offset(
-        center.dx + (radius - 5) * math.cos(rad),
-        center.dy + (radius - 5) * math.sin(rad),
-      );
-      final end = Offset(
-        center.dx + radius * math.cos(rad),
-        center.dy + radius * math.sin(rad),
-      );
-      canvas.drawLine(start, end, tickPaint);
+    for (double y = 0; y < size.height; y += 12) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
-
-    // Active sweep radar ray
-    final sweepPaint = Paint()
-      ..color = color.withValues(alpha: 0.5)
-      ..strokeWidth = 2.0;
-    final sweepRad = angle * 2 * math.pi;
-    final sweepEnd = Offset(
-      center.dx + radius * math.cos(sweepRad),
-      center.dy + radius * math.sin(sweepRad),
-    );
-    canvas.drawLine(center, sweepEnd, sweepPaint);
   }
 
   @override
-  bool shouldRepaint(_RadarRingPainter oldDelegate) {
-    return oldDelegate.angle != angle || oldDelegate.color != color;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _HudScopePainter extends CustomPainter {
+  final Color color;
+  final double angle;
+  final bool isLocked;
+
+  _HudScopePainter({required this.color, required this.angle, required this.isLocked});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.6)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final double w = size.width;
+    final double h = size.height;
+    const double len = 16.0;
+
+    canvas.drawPath(
+        Path()
+          ..moveTo(12, 12 + len)
+          ..lineTo(12, 12)
+          ..lineTo(12 + len, 12),
+        paint);
+
+    canvas.drawPath(
+        Path()
+          ..moveTo(w - 12 - len, 12)
+          ..lineTo(w - 12, 12)
+          ..lineTo(w - 12, 12 + len),
+        paint);
+
+    canvas.drawPath(
+        Path()
+          ..moveTo(12, h - 58 - len)
+          ..lineTo(12, h - 58)
+          ..lineTo(12 + len, h - 58),
+        paint);
+
+    canvas.drawPath(
+        Path()
+          ..moveTo(w - 12 - len, h - 58)
+          ..lineTo(w - 12, h - 58)
+          ..lineTo(w - 12, h - 58 - len),
+        paint);
+
+    if (!isLocked) {
+      final center = Offset(w / 2, (h - 48) / 2);
+      const crossSize = 10.0;
+      canvas.drawLine(Offset(center.dx - crossSize, center.dy), Offset(center.dx + crossSize, center.dy), paint);
+      canvas.drawLine(Offset(center.dx, center.dy - crossSize), Offset(center.dx, center.dy + crossSize), paint);
+      
+      final ringRadius = 24.0 + (math.sin(angle * 2 * math.pi) * 4.0);
+      canvas.drawCircle(center, ringRadius, paint..color = color.withValues(alpha: 0.25));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HudScopePainter oldDelegate) {
+    return oldDelegate.angle != angle || oldDelegate.color != color || oldDelegate.isLocked != isLocked;
   }
 }
