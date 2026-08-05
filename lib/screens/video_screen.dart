@@ -825,6 +825,7 @@ class _VideoScreenState extends State<VideoScreen> {
                                 final video = videos[index];
                                 return _VipVideoCard(
                                   video: video,
+                                  index: index,
                                   hasPremium: dataService.hasAnyPremium,
                                   languageCode: strings.languageCode,
                                   onTap: () => _playVideo(video, dataService.hasAnyPremium),
@@ -1054,12 +1055,14 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
 
 class _VipVideoCard extends StatefulWidget {
   final BattleVideo video;
+  final int index;
   final bool hasPremium;
   final String languageCode;
   final VoidCallback onTap;
 
   const _VipVideoCard({
     required this.video,
+    required this.index,
     required this.hasPremium,
     required this.languageCode,
     required this.onTap,
@@ -1090,10 +1093,156 @@ class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderS
 
   @override
   Widget build(BuildContext context) {
-    final isVi = widget.languageCode == 'vi';
+
     final title = widget.video.getTitle(widget.languageCode);
     final desc = widget.video.getDescription(widget.languageCode);
-    final isBattle = title.toLowerCase().contains('vs');
+
+    final isEven = widget.index % 2 == 0;
+    
+    // Asymmetric cyberpunk card corners
+    final cardRadius = isEven
+        ? const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            bottomRight: Radius.circular(24),
+          )
+        : const BorderRadius.only(
+            topRight: Radius.circular(24),
+            bottomLeft: Radius.circular(24),
+          );
+
+    final accentColor = widget.hasPremium
+        ? const Color(0xFF00F0FF)
+        : const Color(0xFFFF0055);
+
+    // Dynamic coordinates & sonar signals
+    final List<String> mockCoords = [
+      'SECTOR A-01 // LAT 24.5° N // DEP 2,000M',
+      'SECTOR B-03 // LAT 11.2° N // DEP 8,500M',
+      'SECTOR C-09 // LAT 35.8° S // DEP 6,000M',
+      'SECTOR D-12 // LAT 15.1° N // DEP 1,200M',
+      'SECTOR E-04 // LAT 08.4° S // DEP 4,500M',
+      'SECTOR F-07 // LAT 42.1° N // DEP 3,100M',
+    ];
+    final coordText = mockCoords[widget.index % mockCoords.length];
+
+    final portalWidget = Stack(
+      alignment: Alignment.center,
+      children: [
+        // Submarine Viewport / Sonar Radar Sweep Animation
+        SizedBox(
+          width: 104,
+          height: 104,
+          child: CustomPaint(
+            painter: _RadarRingPainter(
+              angle: _pulseController.value,
+              color: accentColor,
+            ),
+          ),
+        ),
+        // Creature Thumbnail Viewport
+        Container(
+          width: 84,
+          height: 84,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+          ),
+          child: ClipOval(
+            child: Image.asset(
+              widget.video.thumbnailUrl,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        // Dark Vignette/Tint Screen
+        Container(
+          width: 84,
+          height: 84,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: widget.hasPremium ? 0.35 : 0.65),
+          ),
+        ),
+        // Lock / Sonar Play Button Overlay
+        if (!widget.hasPremium)
+          const Icon(
+            Icons.lock_rounded,
+            color: Color(0xFFFF0055),
+            size: 24,
+          )
+        else
+          ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.05).animate(
+              CurvedAnimation(
+                parent: _pulseController,
+                curve: Curves.easeInOut,
+              ),
+            ),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withValues(alpha: 0.7),
+                border: Border.all(color: const Color(0xFF00F0FF), width: 1.5),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Color(0xFF00F0FF),
+                size: 24,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final infoWidget = Expanded(
+      child: Column(
+        crossAxisAlignment: isEven ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Cyber Sector & Coordinate details
+          Text(
+            coordText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: accentColor.withValues(alpha: 0.7),
+              fontSize: 9,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 5),
+          // Title
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: isEven ? TextAlign.left : TextAlign.right,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 5),
+          // Description
+          Text(
+            desc,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: isEven ? TextAlign.left : TextAlign.right,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
@@ -1103,231 +1252,111 @@ class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderS
       },
       onTapCancel: () => setState(() => _isPressed = false),
       child: AnimatedScale(
-        scale: _isPressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
+        scale: _isPressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 100),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.only(bottom: 24),
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: cardRadius,
             border: Border.all(
-              color: widget.hasPremium 
-                  ? const Color(0xFF00F0FF).withValues(alpha: _isPressed ? 0.4 : 0.15)
-                  : const Color(0xFFFF0055).withValues(alpha: _isPressed ? 0.4 : 0.15),
-              width: 1.5,
+              color: accentColor.withValues(alpha: _isPressed ? 0.45 : 0.18),
+              width: 1.2,
             ),
-            color: const Color(0xFF030D1B).withValues(alpha: 0.85),
+            gradient: LinearGradient(
+              colors: isEven
+                  ? [
+                      const Color(0xFF041021).withValues(alpha: 0.8),
+                      const Color(0xFF020712).withValues(alpha: 0.4),
+                    ]
+                  : [
+                      const Color(0xFF020712).withValues(alpha: 0.4),
+                      const Color(0xFF041021).withValues(alpha: 0.8),
+                    ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
             boxShadow: [
               BoxShadow(
-                color: (widget.hasPremium ? const Color(0xFF00F0FF) : const Color(0xFFFF0055))
-                    .withValues(alpha: _isPressed ? 0.15 : 0.05),
-                blurRadius: 15,
-                spreadRadius: 1,
+                color: accentColor.withValues(alpha: _isPressed ? 0.15 : 0.03),
+                blurRadius: 10,
               ),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Thumbnail Stack
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Image with dark gradient vignette
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Image.asset(
-                        widget.video.thumbnailUrl,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    // Dark vignette overlay
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.85),
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Cyber Tag on Top-Left
-                    Positioned(
-                      top: 12,
-                      left: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          color: Colors.black.withValues(alpha: 0.65),
-                          border: Border.all(
-                            color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              isBattle
-                                  ? (isVi ? 'ĐỐI ĐẦU // CLASH' : 'BATTLE // CLASH')
-                                  : (isVi ? 'KHÁM PHÁ // DEEP' : 'EXPLORE // DEEP'),
-                              style: TextStyle(
-                                color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Frosted Lock Screen if VIP locked
-                    if (!widget.hasPremium)
-                      Positioned.fill(
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: const Color(0xFFFF0055).withValues(alpha: 0.15),
-                                    border: Border.all(color: const Color(0xFFFF0055), width: 1.5),
-                                  ),
-                                  child: const Icon(
-                                    Icons.lock_outline_rounded,
-                                    color: Color(0xFFFF0055),
-                                    size: 28,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  isVi ? 'KÍCH HOẠT VIP ĐỂ XEM' : 'VIP UPGRADE REQUIRED',
-                                  style: const TextStyle(
-                                    color: Color(0xFFFF0055),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Play button overlay if VIP unlocked
-                    if (widget.hasPremium)
-                      AnimatedBuilder(
-                        animation: _pulseController,
-                        builder: (context, child) {
-                          return Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Pulsating sonar ring 1
-                              Container(
-                                width: 56 + (_pulseController.value * 20),
-                                height: 56 + (_pulseController.value * 20),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(0xFF00F0FF).withValues(
-                                      alpha: (1.0 - _pulseController.value).clamp(0.0, 1.0),
-                                    ),
-                                    width: 1.5,
-                                  ),
-                                ),
-                              ),
-                              // Play Button
-                              Container(
-                                width: 54,
-                                height: 54,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.black.withValues(alpha: 0.7),
-                                  border: Border.all(color: const Color(0xFF00F0FF), width: 2),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
-                                      blurRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.play_arrow_rounded,
-                                  color: Color(0xFF00F0FF),
-                                  size: 34,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
+          child: Row(
+            children: isEven
+                ? [
+                    portalWidget,
+                    const SizedBox(width: 16),
+                    infoWidget,
+                  ]
+                : [
+                    infoWidget,
+                    const SizedBox(width: 16),
+                    portalWidget,
                   ],
-                ),
-
-                // Info Section
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        desc,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 11,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _RadarRingPainter extends CustomPainter {
+  final double angle;
+  final Color color;
+
+  _RadarRingPainter({required this.angle, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.3)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    // Draw outer radar boundary
+    canvas.drawCircle(center, radius, paint);
+    
+    // Draw inner border rim
+    canvas.drawCircle(center, radius - 8, paint..color = color.withValues(alpha: 0.15));
+
+    // Draw compass degree markers (ticks)
+    final tickPaint = Paint()
+      ..color = color.withValues(alpha: 0.4)
+      ..strokeWidth = 1.0;
+    
+    for (int i = 0; i < 360; i += 30) {
+      final rad = i * math.pi / 180;
+      final start = Offset(
+        center.dx + (radius - 5) * math.cos(rad),
+        center.dy + (radius - 5) * math.sin(rad),
+      );
+      final end = Offset(
+        center.dx + radius * math.cos(rad),
+        center.dy + radius * math.sin(rad),
+      );
+      canvas.drawLine(start, end, tickPaint);
+    }
+
+    // Active sweep radar ray
+    final sweepPaint = Paint()
+      ..color = color.withValues(alpha: 0.5)
+      ..strokeWidth = 2.0;
+    final sweepRad = angle * 2 * math.pi;
+    final sweepEnd = Offset(
+      center.dx + radius * math.cos(sweepRad),
+      center.dy + radius * math.sin(sweepRad),
+    );
+    canvas.drawLine(center, sweepEnd, sweepPaint);
+  }
+
+  @override
+  bool shouldRepaint(_RadarRingPainter oldDelegate) {
+    return oldDelegate.angle != angle || oldDelegate.color != color;
   }
 }
