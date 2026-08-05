@@ -819,135 +819,18 @@ class _VideoScreenState extends State<VideoScreen> {
                               ),
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                               itemCount: videos.length,
                               itemBuilder: (context, index) {
                                 final video = videos[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 20),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
-                            width: 1,
-                          ),
-                          color: const Color(0xFF061121).withValues(alpha: 0.5),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Video Thumbnail Stack
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Thumbnail Image
-                                ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                                  child: Image.asset(
-                                    video.thumbnailUrl,
-                                    width: double.infinity,
-                                    height: 180,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                // Vignette Gradient
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.black.withValues(alpha: 0.3),
-                                          Colors.black.withValues(alpha: 0.7),
-                                        ],
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                
-                                // Lock overlay if not VIP
-                                if (!dataService.hasAnyPremium)
-                                  Positioned(
-                                    top: 12,
-                                    right: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.black54,
-                                      ),
-                                      child: const Icon(
-                                        Icons.lock_rounded,
-                                        color: Color(0xFF00F0FF),
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-
-                                // Play Button Icon Overlay
-                                GestureDetector(
+                                return _VipVideoCard(
+                                  video: video,
+                                  hasPremium: dataService.hasAnyPremium,
+                                  languageCode: strings.languageCode,
                                   onTap: () => _playVideo(video, dataService.hasAnyPremium),
-                                  child: Container(
-                                    width: 58,
-                                    height: 58,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.black.withValues(alpha: 0.6),
-                                      border: Border.all(
-                                        color: const Color(0xFF00F0FF),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
-                                          blurRadius: 12,
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.play_arrow_rounded,
-                                      color: Color(0xFF00F0FF),
-                                      size: 38,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            // Video Info
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    video.getTitle(strings.languageCode),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    video.getDescription(strings.languageCode),
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.6),
-                                      fontSize: 11,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  )),
+                                );
+                              },
+                            )),
                 ),
               ],
             ),
@@ -1162,6 +1045,287 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _VipVideoCard extends StatefulWidget {
+  final BattleVideo video;
+  final bool hasPremium;
+  final String languageCode;
+  final VoidCallback onTap;
+
+  const _VipVideoCard({
+    required this.video,
+    required this.hasPremium,
+    required this.languageCode,
+    required this.onTap,
+  });
+
+  @override
+  State<_VipVideoCard> createState() => _VipVideoCardState();
+}
+
+class _VipVideoCardState extends State<_VipVideoCard> with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  bool _isPressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isVi = widget.languageCode == 'vi';
+    final title = widget.video.getTitle(widget.languageCode);
+    final desc = widget.video.getDescription(widget.languageCode);
+    final isBattle = title.toLowerCase().contains('vs');
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.only(bottom: 24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: widget.hasPremium 
+                  ? const Color(0xFF00F0FF).withValues(alpha: _isPressed ? 0.4 : 0.15)
+                  : const Color(0xFFFF0055).withValues(alpha: _isPressed ? 0.4 : 0.15),
+              width: 1.5,
+            ),
+            color: const Color(0xFF030D1B).withValues(alpha: 0.85),
+            boxShadow: [
+              BoxShadow(
+                color: (widget.hasPremium ? const Color(0xFF00F0FF) : const Color(0xFFFF0055))
+                    .withValues(alpha: _isPressed ? 0.15 : 0.05),
+                blurRadius: 15,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Thumbnail Stack
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Image with dark gradient vignette
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Image.asset(
+                        widget.video.thumbnailUrl,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    // Dark vignette overlay
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.85),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Cyber Tag on Top-Left
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          color: Colors.black.withValues(alpha: 0.65),
+                          border: Border.all(
+                            color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isBattle
+                                  ? (isVi ? 'ĐỐI ĐẦU // CLASH' : 'BATTLE // CLASH')
+                                  : (isVi ? 'KHÁM PHÁ // DEEP' : 'EXPLORE // DEEP'),
+                              style: TextStyle(
+                                color: isBattle ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Frosted Lock Screen if VIP locked
+                    if (!widget.hasPremium)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFFFF0055).withValues(alpha: 0.15),
+                                    border: Border.all(color: const Color(0xFFFF0055), width: 1.5),
+                                  ),
+                                  child: const Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: Color(0xFFFF0055),
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  isVi ? 'KÍCH HOẠT VIP ĐỂ XEM' : 'VIP UPGRADE REQUIRED',
+                                  style: const TextStyle(
+                                    color: Color(0xFFFF0055),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Play button overlay if VIP unlocked
+                    if (widget.hasPremium)
+                      AnimatedBuilder(
+                        animation: _pulseController,
+                        builder: (context, child) {
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Pulsating sonar ring 1
+                              Container(
+                                width: 56 + (_pulseController.value * 20),
+                                height: 56 + (_pulseController.value * 20),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFF00F0FF).withValues(
+                                      alpha: (1.0 - _pulseController.value).clamp(0.0, 1.0),
+                                    ),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              // Play Button
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.black.withValues(alpha: 0.7),
+                                  border: Border.all(color: const Color(0xFF00F0FF), width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Color(0xFF00F0FF),
+                                  size: 34,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                  ],
+                ),
+
+                // Info Section
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 11,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
