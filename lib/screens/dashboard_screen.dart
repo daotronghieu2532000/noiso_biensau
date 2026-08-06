@@ -694,10 +694,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             decoration: BoxDecoration(
               color: const Color(0xFF071224).withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
+              /* border: Border.all(
                 color: color.withValues(alpha: 0.25),
                 width: 1.5,
-              ),
+              ), */
               boxShadow: [
                 BoxShadow(
                   color: color.withValues(alpha: 0.05),
@@ -747,7 +747,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     ),
                   ),
 
-                  // 4. Corner bracket details for sci-fi look
+                  // 4. Corner bracket details for sci-fi look (commented out)
+                  /*
                   Positioned(
                     top: 0,
                     left: 0,
@@ -776,6 +777,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       ),
                     ),
                   ),
+                  */
 
                   // 5. Card Contents
                   Padding(
