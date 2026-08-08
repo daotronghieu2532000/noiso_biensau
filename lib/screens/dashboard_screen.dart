@@ -10,6 +10,7 @@ import 'sonar_screen.dart';
 import 'simulator_screen.dart';
 import 'logbook_screen.dart';
 import 'settings_screen.dart';
+import 'leaderboard_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -351,12 +352,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             const SizedBox(width: 8),
             Row(
               children: [
-                Icon(
-                  Icons.shield_outlined,
-                  color: const Color(0xFF00F0FF).withValues(alpha: 0.5),
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
+                buildLeaderboardButton(context),
+                const SizedBox(width: 4),
                 buildVolumeButton(context),
                 const SizedBox(width: 4),
                 buildSettingsButton(context),

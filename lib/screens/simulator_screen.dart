@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../services/data_service.dart';
 import '../services/sound_service.dart';
@@ -449,35 +450,43 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
           ),
           // 3. Main content
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                children: [
-                  _buildHeader(context),
-                  const SizedBox(height: 8),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  child: _buildHeader(context),
+                ),
 
-                  // Main Cockpit Simulator Screen
-                  Expanded(
-                    flex: 7,
-                    child: _gameOver 
-                        ? _buildGameOverPanel(dataService) 
-                        : _buildSimulationPanel(dataService),
+                // Main Cockpit Simulator Screen
+                Expanded(
+                  flex: 7,
+                  child: _gameOver 
+                      ? _buildGameOverPanel(dataService) 
+                      : _buildSimulationPanel(dataService),
+                ),
+
+                // Action HUD Control buttons
+                if (_gameActive && !_gameOver) ...[
+                  Container(
+                    width: double.infinity,
+                    height: 1.5,
+                    color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
                   ),
-                  const SizedBox(height: 12),
-
-                  // Action HUD Control buttons
-                  if (_gameActive && !_gameOver) ...[
-                    _buildControlsPanel(),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Text Log console
-                  Expanded(
-                    flex: 3,
-                    child: _buildLogConsole(),
-                  ),
+                  _buildControlsPanel(),
                 ],
-              ),
+
+                Container(
+                  width: double.infinity,
+                  height: 1.5,
+                  color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+                ),
+
+                // Text Log console
+                Expanded(
+                  flex: 3,
+                  child: _buildLogConsole(),
+                ),
+              ],
             ),
           ),
         ],
@@ -495,32 +504,30 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
           onPressed: () {
             if (_gameActive && !_gameOver) {
               // Ask for confirmation
-              showDialog(
+              showCupertinoDialog(
                 context: context,
-                builder: (context) => AlertDialog(
-                  backgroundColor: const Color(0xFF0D1F3D),
+                builder: (context) => CupertinoAlertDialog(
                   title: Text(
                     strings.languageCode == 'vi' ? 'Hủy nhiệm vụ lặn?' : 'Abort dive mission?',
-                    style: const TextStyle(color: Color(0xFFFF3366), fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   content: Text(
                     strings.languageCode == 'vi'
                         ? 'Tiến trình lặn hiện tại sẽ bị mất. Bạn có chắc chắn muốn thoát?'
                         : 'Current dive progress will be lost. Are you sure you want to exit?',
-                    style: const TextStyle(color: Colors.white70),
                   ),
                   actions: [
-                    TextButton(
+                    CupertinoDialogAction(
                       child: Text(
-                        strings.languageCode == 'vi' ? 'TIẾP TỤC LẶN' : 'CONTINUE DIVE',
-                        style: const TextStyle(color: Color(0xFF00F0FF)),
+                        strings.languageCode == 'vi' ? 'Tiếp tục lặn' : 'Continue Dive',
+                        style: const TextStyle(color: Color(0xFF007AFF)), // Standard iOS blue
                       ),
                       onPressed: () => Navigator.pop(context),
                     ),
-                    TextButton(
+                    CupertinoDialogAction(
+                      isDestructiveAction: true,
                       child: Text(
-                        strings.languageCode == 'vi' ? 'THOÁT' : 'EXIT',
-                        style: const TextStyle(color: Color(0xFFFF3366)),
+                        strings.languageCode == 'vi' ? 'Thoát' : 'Exit',
                       ),
                       onPressed: () {
                         Navigator.pop(context); // close dialog
@@ -575,13 +582,15 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.only(top: 0, bottom: 12, left: 0, right: 0),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1F3D).withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _shieldActive ? const Color(0xFFFF3366) : const Color(0xFF00F0FF).withValues(alpha: 0.25),
-          width: _shieldActive ? 2.5 : 1.5,
+        borderRadius: BorderRadius.zero,
+        border: Border(
+          top: BorderSide(
+            color: _shieldActive ? const Color(0xFFFF3366) : const Color(0xFF00F0FF).withValues(alpha: 0.25),
+            width: _shieldActive ? 2.5 : 1.5,
+          ),
         ),
       ),
       child: Column(
@@ -593,9 +602,9 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
             child: _buildAbyssViewport(),
           ),
 
-          // Telemetry Gauges (O2, Hull, Shield)
+          // Telemetry Gauges (O2, Hull, Shield) with horizontal padding
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 12.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -635,8 +644,13 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
       width: double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFF0D1F3D).withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.zero,
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
+            width: 1.5,
+          ),
+        ),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(14.0),
@@ -755,7 +769,7 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
               width: double.infinity,
               height: 46,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(23),
+                borderRadius: BorderRadius.zero,
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
@@ -773,7 +787,7 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00F0FF),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(23)),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                   elevation: 0,
                 ),
               ),
@@ -864,10 +878,10 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
     }
 
     return AspectRatio(
-      aspectRatio: 1.8,
+      aspectRatio: 1.3,
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.zero,
           border: Border.all(
             color: _activeThreat != null && !_shieldActive
                 ? const Color(0xFFFF3366)
@@ -1220,52 +1234,69 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
   Widget _buildControlsPanel() {
     final strings = AppStrings.of(context);
     return Container(
-      padding: const EdgeInsets.all(10),
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1F3D).withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.15)),
+        color: const Color(0xFF0D1F3D).withValues(alpha: 0.15),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           // Oxygen button
-          _buildActionButton(
-            onPressed: _oxygenCharges > 0 && _oxygen < 0.9 ? _refillOxygen : null,
-            iconWidget: Image.asset(
-              'assets/images/icon/oxygen-mask.png',
-              width: 36,
-              height: 36,
+          Expanded(
+            child: _buildActionButton(
+              onPressed: _oxygenCharges > 0 && _oxygen < 0.9 ? _refillOxygen : null,
+              iconWidget: Image.asset(
+                'assets/images/icon/oxygen-mask.png',
+                width: 32,
+                height: 32,
+              ),
+              label: strings.languageCode == 'en' ? 'REFUEL O2' : 'BƠM OXY',
+              color: Colors.green,
+              isEnabled: _oxygenCharges > 0 && _oxygen < 0.9,
             ),
-            label: strings.languageCode == 'en' ? 'REFUEL O2' : 'BƠM OXY',
-            color: Colors.green,
-            isEnabled: _oxygenCharges > 0 && _oxygen < 0.9,
+          ),
+          
+          // Separator 1: "|"
+          Container(
+            width: 1.5,
+            height: 60,
+            color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
           ),
           
           // Shield button
-          _buildActionButton(
-            onPressed: _energy >= 0.3 && !_shieldActive ? _activateShield : null,
-            iconWidget: Image.asset(
-              'assets/images/icon/shield.png',
-              width: 36,
-              height: 36,
+          Expanded(
+            child: _buildActionButton(
+              onPressed: _energy >= 0.3 && !_shieldActive ? _activateShield : null,
+              iconWidget: Image.asset(
+                'assets/images/icon/shield.png',
+                width: 32,
+                height: 32,
+              ),
+              label: strings.languageCode == 'en' ? 'DEFLECTOR' : 'LÁ CHẮN',
+              color: const Color(0xFFFF3366),
+              isEnabled: _energy >= 0.3 && !_shieldActive,
             ),
-            label: strings.languageCode == 'en' ? 'DEFLECTOR' : 'LÁ CHẮN',
-            color: const Color(0xFFFF3366),
-            isEnabled: _energy >= 0.3 && !_shieldActive,
+          ),
+          
+          // Separator 2: "|"
+          Container(
+            width: 1.5,
+            height: 60,
+            color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
           ),
 
           // Repair button
-          _buildActionButton(
-            onPressed: _hullCharges > 0 && _hull < 0.9 ? _repairHull : null,
-            iconWidget: Image.asset(
-              'assets/images/icon/repair-tools.png',
-              width: 36,
-              height: 36,
+          Expanded(
+            child: _buildActionButton(
+              onPressed: _hullCharges > 0 && _hull < 0.9 ? _repairHull : null,
+              iconWidget: Image.asset(
+                'assets/images/icon/repair-tools.png',
+                width: 32,
+                height: 32,
+              ),
+              label: strings.languageCode == 'en' ? 'WELD HULL' : 'HÀN VỎ TÀU',
+              color: const Color(0xFFFFCC00),
+              isEnabled: _hullCharges > 0 && _hull < 0.9,
             ),
-            label: strings.languageCode == 'en' ? 'WELD HULL' : 'HÀN VỎ TÀU',
-            color: const Color(0xFFFFCC00),
-            isEnabled: _hullCharges > 0 && _hull < 0.9,
           ),
         ],
       ),
@@ -1279,51 +1310,38 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
     required Color color,
     required bool isEnabled,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          if (isEnabled)
-            BoxShadow(
-              color: color.withValues(alpha: 0.25),
-              blurRadius: 8,
-              spreadRadius: 1,
-            )
-        ],
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isEnabled 
+            ? const Color(0xFF0D1F3D).withValues(alpha: 0.4) 
+            : Colors.black.withValues(alpha: 0.3),
+        foregroundColor: color,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
+        side: BorderSide.none,
       ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isEnabled 
-              ? const Color(0xFF0D1F3D).withValues(alpha: 0.6) 
-              : Colors.black.withValues(alpha: 0.4),
-          side: BorderSide(
-            color: isEnabled ? color : Colors.white.withValues(alpha: 0.1),
-            width: isEnabled ? 2.0 : 1.0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Opacity(
+            opacity: isEnabled ? 1.0 : 0.3,
+            child: iconWidget,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          elevation: isEnabled ? 4 : 0,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Opacity(
-              opacity: isEnabled ? 1.0 : 0.3,
-              child: iconWidget,
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: isEnabled ? Colors.white : Colors.white.withValues(alpha: 0.2),
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
             ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isEnabled ? Colors.white : Colors.white.withValues(alpha: 0.2),
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1352,8 +1370,10 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF0F0307),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFF3366), width: 2.0),
+        borderRadius: BorderRadius.zero,
+        border: const Border(
+          top: BorderSide(color: Color(0xFFFF3366), width: 2.0),
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFFFF3366).withValues(alpha: 0.25),
@@ -1527,8 +1547,10 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFF010307),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.15)),
+        borderRadius: BorderRadius.zero,
+        border: Border(
+          bottom: BorderSide(color: const Color(0xFF00F0FF).withValues(alpha: 0.15), width: 1.5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

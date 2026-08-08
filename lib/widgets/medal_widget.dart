@@ -196,6 +196,23 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
     }
   }
 
+  String _getMedalImagePath() {
+    switch (widget.type) {
+      case MedalType.twilightScout:
+        return 'assets/images/medals/twilight_scout.png';
+      case MedalType.midnightExplorer:
+        return 'assets/images/medals/midnight_explorer.png';
+      case MedalType.abyssalPioneer:
+        return 'assets/images/medals/abyssal_pioneer.png';
+      case MedalType.marianaConqueror:
+        return 'assets/images/medals/mariana_conqueror.png';
+      case MedalType.cryptographer:
+        return 'assets/images/medals/cryptographer.png';
+      case MedalType.deepseaLegend:
+        return 'assets/images/medals/deepsea_legend.png';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color themeColor = _getMedalThemeColor();
@@ -224,34 +241,19 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
         }
 
         return Container(
-          margin: const EdgeInsets.all(8),
+          margin: EdgeInsets.zero,
           decoration: BoxDecoration(
-            color: const Color(0xFF030A18).withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: widget.isUnlocked 
-                  ? themeColor.withValues(alpha: 0.3) 
-                  : Colors.white10,
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.isUnlocked 
-                    ? themeColor.withValues(alpha: 0.05) 
-                    : Colors.transparent,
-                blurRadius: 15,
-                spreadRadius: 1,
-              ),
-            ],
+            color: const Color(0xFF030A18).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.zero,
           ),
           child: Column(
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               
               // 1. Majestic Badge Drawing Container
               SizedBox(
-                height: 130,
-                width: 130,
+                height: 104,
+                width: 104,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -272,19 +274,29 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
                         ),
                       ),
                       
-                    // The main custom-painted medal badge
+                    // The main high-quality 3D medal badge image
                     Transform.scale(
                       scale: medalScale,
-                      child: Opacity(
-                        opacity: widget.isUnlocked ? 1.0 : 0.45,
-                        child: CustomPaint(
-                          size: const Size(100, 100),
-                          painter: MedalPainter(
-                            type: widget.type,
-                            color: themeColor,
-                            isUnlocked: widget.isUnlocked,
-                          ),
-                        ),
+                      child: SizedBox(
+                        width: 96,
+                        height: 96,
+                        child: widget.isUnlocked
+                            ? Image.asset(
+                                _getMedalImagePath(),
+                                fit: BoxFit.contain,
+                              )
+                            : ColorFiltered(
+                                colorFilter: const ColorFilter.matrix(<double>[
+                                  0.2126, 0.7152, 0.0722, 0, 0,
+                                  0.2126, 0.7152, 0.0722, 0, 0,
+                                  0.2126, 0.7152, 0.0722, 0, 0,
+                                  0,      0,      0,      0.35, 0, // 35% opacity + grayscale for perfect locked look
+                                ]),
+                                child: Image.asset(
+                                  _getMedalImagePath(),
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
                       ),
                     ),
 
@@ -396,7 +408,6 @@ class _MedalWidgetState extends State<MedalWidget> with SingleTickerProviderStat
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         );

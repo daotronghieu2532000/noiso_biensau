@@ -6,6 +6,7 @@ import '../models/creature.dart';
 import '../services/data_service.dart';
 import '../widgets/structured_description_widget.dart';
 import '../widgets/medal_widget.dart';
+import '../widgets/cached_video_player.dart';
 import '../l10n/app_strings.dart';
 import 'settings_screen.dart';
 
@@ -336,19 +337,38 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
                         ),
                       ),
                       
-                      // Widescreen image
+                      // Widescreen image/video
                       ClipRRect(
                         borderRadius: const BorderRadius.only(
                           topRight: Radius.circular(15),
                         ),
-                        child: creature.buildImage(
-                          fit: BoxFit.cover,
-                          color: creature.isLocked ? Colors.black.withValues(alpha: 0.95) : null,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: const Color(0xFF030D1C),
-                            child: Icon(Icons.waves, color: accentColor, size: 48),
-                          ),
-                        ),
+                        child: creature.isLocked
+                            ? creature.buildImage(
+                                fit: BoxFit.cover,
+                                color: Colors.black.withValues(alpha: 0.95),
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: const Color(0xFF030D1C),
+                                  child: Icon(Icons.waves, color: accentColor, size: 48),
+                                ),
+                              )
+                            : (creature.videoUrl.isNotEmpty)
+                                ? CachedCreatureVideoPlayer(
+                                    videoUrl: creature.videoUrl,
+                                    placeholder: creature.buildImage(
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Container(
+                                        color: const Color(0xFF030D1C),
+                                        child: Icon(Icons.waves, color: accentColor, size: 48),
+                                      ),
+                                    ),
+                                  )
+                                : creature.buildImage(
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFF030D1C),
+                                      child: Icon(Icons.waves, color: accentColor, size: 48),
+                                    ),
+                                  ),
                       ),
                       
                       // Vignette overlay
@@ -653,17 +673,48 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: creature.buildImage(
-                          width: double.infinity,
-                          height: 330,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            width: double.infinity,
-                            height: 330,
-                            color: const Color(0xFF020813),
-                            child: const Icon(Icons.waves, color: Color(0xFF00F0FF), size: 48),
-                          ),
-                        ),
+                        child: creature.isLocked
+                            ? creature.buildImage(
+                                width: double.infinity,
+                                height: 330,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  width: double.infinity,
+                                  height: 330,
+                                  color: const Color(0xFF020813),
+                                  child: const Icon(Icons.waves, color: Color(0xFF00F0FF), size: 48),
+                                ),
+                              )
+                            : (creature.videoUrl.isNotEmpty)
+                                ? SizedBox(
+                                    width: double.infinity,
+                                    height: 330,
+                                    child: CachedCreatureVideoPlayer(
+                                      videoUrl: creature.videoUrl,
+                                      placeholder: creature.buildImage(
+                                        width: double.infinity,
+                                        height: 330,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Container(
+                                          width: double.infinity,
+                                          height: 330,
+                                          color: const Color(0xFF020813),
+                                          child: const Icon(Icons.waves, color: Color(0xFF00F0FF), size: 48),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : creature.buildImage(
+                                    width: double.infinity,
+                                    height: 330,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      width: double.infinity,
+                                      height: 330,
+                                      color: const Color(0xFF020813),
+                                      child: const Icon(Icons.waves, color: Color(0xFF00F0FF), size: 48),
+                                    ),
+                                  ),
                       ),
                       // Vignette overlay
                       Positioned.fill(
@@ -844,12 +895,16 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
     final totalCreatures = dataService.creatures.length;
     final unlockedCreatures = dataService.creatures.where((c) => !c.isLocked).length;
 
-    return GridView.count(
-      crossAxisCount: 2,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
-      childAspectRatio: 0.68,
-      physics: const BouncingScrollPhysics(),
-      children: [
+    return Container(
+      color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+      child: GridView.count(
+        crossAxisCount: 2,
+        padding: EdgeInsets.zero,
+        crossAxisSpacing: 1.5,
+        mainAxisSpacing: 1.5,
+        childAspectRatio: 1.02,
+        physics: const BouncingScrollPhysics(),
+        children: [
         MedalWidget(
           type: MedalType.twilightScout,
           title: isEn ? 'Twilight Scout' : 'Hoàng Hôn Thám Hiểm',
@@ -905,8 +960,9 @@ class _LogbookScreenState extends State<LogbookScreen> with SingleTickerProvider
           onUnlockAnimationComplete: () => _onMedalUnlockAnimated('deepsea_legend'),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 }
 
 class LogbookBracketsPainter extends CustomPainter {

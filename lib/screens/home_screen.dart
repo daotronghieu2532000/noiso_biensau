@@ -14,6 +14,7 @@ import 'dashboard_screen.dart';
 import 'settings_screen.dart';
 import 'battle_screen.dart';
 import 'video_screen.dart';
+import '../widgets/cached_video_player.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late final AnimationController _particleController;
   
   double _currentDepth = 0.0;
+  int _activeMediaTab = 0; // 0 for Image, 1 for Video
   final List<_BubbleParticle> _particles = [];
   final List<_MarineSnowParticle> _marineSnowParticles = [];
   final List<_BioluminescentJellyfish> _jellyfishes = [];
@@ -969,6 +971,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ),
 
+                    // Media Tab Selector for Image vs Video
+                    SliverToBoxAdapter(
+                      child: _buildMediaTabSelector(),
+                    ),
                     // List of Creature cards mapped by depth
                     SliverList(
                       delegate: SliverChildBuilderDelegate(
@@ -1336,6 +1342,88 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildMediaTabSelector() {
+    final strings = AppStrings.of(context);
+    final themeColor = const Color(0xFF00F0FF);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF030D1C).withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: themeColor.withValues(alpha: 0.2),
+            width: 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _activeMediaTab = 0;
+                  });
+                  Provider.of<SoundService>(context, listen: false).playCreatureSound("sonar_echo.mp3");
+                },
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _activeMediaTab == 0
+                        ? themeColor.withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Text(
+                    strings.languageCode == 'en' ? 'SCAN IMAGES' : 'HÌNH ẢNH',
+                    style: TextStyle(
+                      color: _activeMediaTab == 0 ? Colors.white : Colors.white30,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _activeMediaTab = 1;
+                  });
+                  Provider.of<SoundService>(context, listen: false).playCreatureSound("sonar_echo.mp3");
+                },
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _activeMediaTab == 1
+                        ? themeColor.withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Text(
+                    strings.languageCode == 'en' ? 'LIVE TELEMETRY' : 'HÌNH ĐỘNG (VIDEO)',
+                    style: TextStyle(
+                      color: _activeMediaTab == 1 ? Colors.white : Colors.white30,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCreatureItem(Creature creature) {
     final dataService = Provider.of<DataService>(context, listen: false);
     final strings = AppStrings.of(context);
@@ -1475,10 +1563,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 ),
                               ),
                             )
-                          : creature.buildImage(
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
-                            ),
+                          : (_activeMediaTab == 1 && creature.videoUrl.isNotEmpty)
+                              ? CachedCreatureVideoPlayer(
+                                  videoUrl: creature.videoUrl,
+                                  useTightMask: true,
+                                  placeholder: creature.buildImage(
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
+                                  ),
+                                )
+                              : creature.buildImage(
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
+                                ),
                     ),
                   ),
                 ),
@@ -3270,7 +3367,31 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required by AutomaticKeepAliveClientMixin
-    final bool isVideoVisible = widget.depth >= 10500;
+    
+    final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? false;
+    final bool isVideoVisible = widget.depth >= 10500 && isCurrentRoute;
+
+    // Toggle play/pause based on route visibility to prevent background battery/CPU drain when screen is covered
+    if (isCurrentRoute) {
+      if (widget.depth >= 10500) {
+        if (_isShowingForward) {
+          if (_forwardController != null && !_forwardController!.value.isPlaying && !_isForwardError) {
+            _forwardController!.play();
+          }
+        } else {
+          if (_reverseController != null && !_reverseController!.value.isPlaying && !_isReverseError) {
+            _reverseController!.play();
+          }
+        }
+      }
+    } else {
+      if (_forwardController != null && _forwardController!.value.isPlaying) {
+        _forwardController!.pause();
+      }
+      if (_reverseController != null && _reverseController!.value.isPlaying) {
+        _reverseController!.pause();
+      }
+    }
 
     return Container(
       margin: const EdgeInsets.only(top: 60.0),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class Creature {
   final String id;
@@ -14,6 +15,7 @@ class Creature {
   final double humanSizeMeters;
   final double creatureSizeMeters;
   final String imageUrl;
+  final String videoUrl;
   final String ambientSound;
   final String description;
   final String descriptionEn;
@@ -33,6 +35,7 @@ class Creature {
     required this.humanSizeMeters,
     required this.creatureSizeMeters,
     required this.imageUrl,
+    required this.videoUrl,
     required this.ambientSound,
     required this.description,
     required this.descriptionEn,
@@ -45,7 +48,7 @@ class Creature {
 
   ImageProvider get imageProvider {
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return NetworkImage(imageUrl);
+      return CachedNetworkImageProvider(imageUrl);
     } else {
       return AssetImage(imageUrl);
     }
@@ -60,14 +63,27 @@ class Creature {
     ImageErrorWidgetBuilder? errorBuilder,
   }) {
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return Image.network(
-        imageUrl,
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
         width: width,
         height: height,
         fit: fit,
         color: color,
         colorBlendMode: colorBlendMode,
-        errorBuilder: errorBuilder ?? (context, error, stackTrace) => Container(
+        placeholder: (context, url) => Container(
+          color: const Color(0xFF0D1F3D).withValues(alpha: 0.15),
+          child: const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00F0FF)),
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => Container(
           color: const Color(0xFF0D1F3D),
           child: const Icon(Icons.broken_image, color: Colors.white24, size: 40),
         ),
@@ -100,6 +116,7 @@ class Creature {
       humanSizeMeters: (json['human_size_meters'] as num).toDouble(),
       creatureSizeMeters: (json['creature_size_meters'] as num).toDouble(),
       imageUrl: json['image_url'] as String,
+      videoUrl: json['video_url'] as String? ?? '',
       ambientSound: json['ambient_sound'] as String,
       description: json['description'] as String,
       descriptionEn: json['description_en'] as String? ?? json['description'] as String,
@@ -122,6 +139,7 @@ class Creature {
       'human_size_meters': humanSizeMeters,
       'creature_size_meters': creatureSizeMeters,
       'image_url': imageUrl,
+      'video_url': videoUrl,
       'ambient_sound': ambientSound,
       'description': description,
       'description_en': descriptionEn,

@@ -308,7 +308,7 @@ class _VideoScreenState extends State<VideoScreen> {
                           ? '🔓 Mở khóa toàn bộ Thủy quái VIP hiện có (Kraken, Leviathan, Cthulhu, Godzilla...)'
                           : '🔓 Unlock all current VIP Creatures (Kraken, Leviathan, Cthulhu, Godzilla...)',
                       true,
-                    ),
+                   ),
                     const SizedBox(height: 8),
                     _buildPerkRow(
                       isVi

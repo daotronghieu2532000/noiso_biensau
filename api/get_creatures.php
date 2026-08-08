@@ -40,6 +40,7 @@ try {
             'human_size_meters' => floatval($row['human_size_meters']),
             'creature_size_meters' => floatval($row['creature_size_meters']),
             'image_url' => $row['image_url'],
+            'video_url' => isset($row['video_url']) ? $row['video_url'] : '',
             'ambient_sound' => $row['ambient_sound'],
             'description' => $row['description'],
             'description_en' => $row['description_en'],

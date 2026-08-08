@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:provider/provider.dart';
 import 'dart:math' as math;
 import '../models/ocean.dart';
@@ -19,6 +20,8 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
   Ocean? _selectedOcean;
   late final AnimationController _pulseController;
   late final AnimationController _scanLineController;
+  late final AnimationController _radarSweepController;
+  late final AnimationController _lockOnController;
   String? _backgroundImage;
   int _activeTab = 0;
 
@@ -94,12 +97,26 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat();
+
+    // Concentric rotating sonar sweep animation
+    _radarSweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat();
+
+    // Target lock-on animation overlay
+    _lockOnController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _scanLineController.dispose();
+    _radarSweepController.dispose();
+    _lockOnController.dispose();
     super.dispose();
   }
 
@@ -110,6 +127,12 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
     });
     // Play radar sonar echo sound
     Provider.of<SoundService>(context, listen: false).playCreatureSound("sonar_echo.mp3");
+    // Trigger Target Lock-On animation for 600ms, then open full majestic illustration!
+    _lockOnController.forward(from: 0.0).then((_) {
+      if (mounted && _selectedOcean?.id == ocean.id) {
+        _showFullOceanFloor(ocean);
+      }
+    });
   }
 
   @override
@@ -228,35 +251,40 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
 
   Widget _buildStatusBanner() {
     final strings = AppStrings.of(context);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
-        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFF00F0FF),
-              shape: BoxShape.circle,
-            ),
-          ).animateBlinkingLED(),
-          const SizedBox(width: 8),
-          Text(
-            strings.radarActive,
-            style: const TextStyle(
-              color: Color(0xFF00F0FF),
-              fontSize: 9.0,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
-            ),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+        child: Container(
+          margin: EdgeInsets.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.35),
           ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF00F0FF),
+                  shape: BoxShape.circle,
+                ),
+              ).animateBlinkingLED(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  strings.radarActive,
+                  style: const TextStyle(
+                    color: Color(0xFF00F0FF),
+                    fontSize: 11.5,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -265,21 +293,18 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
     final dataService = Provider.of<DataService>(context, listen: false);
     final strings = AppStrings.of(context);
     final mapHeight = screenSize.width * 0.95; // Ensure square-ish or proportional height
+    final double midX = screenSize.width / 2;
+    final double midY = mapHeight / 2;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+      margin: EdgeInsets.zero,
       height: mapHeight,
       width: double.infinity,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.black,
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(
-          color: const Color(0xFF00F0FF).withValues(alpha: 0.2),
-          width: 1.5,
-        ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14.5),
+        borderRadius: BorderRadius.zero,
         child: Stack(
           children: [
             // 1. World Ocean Map Background
@@ -295,6 +320,22 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
               child: IgnorePointer(
                 child: CustomPaint(
                   painter: _RadarGridPainter(),
+                ),
+              ),
+            ),
+
+            // 2.5 Concentric Sonar Sweep Painter
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _radarSweepController,
+                  builder: (context, child) {
+                    return CustomPaint(
+                      painter: _SonarSweepPainter(
+                        angle: _radarSweepController.value * 2 * math.pi,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -324,9 +365,9 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
               },
             ),
 
-            // 3.5 Monster shadows active on the map
+            // 3.5 Monster shadows active on the map (positioned using full width)
             ..._monsterShadows.map((shadow) {
-              final double posX = shadow.mapX * (screenSize.width - 32.0);
+              final double posX = shadow.mapX * screenSize.width;
               final double posY = shadow.mapY * mapHeight;
 
               return Positioned(
@@ -347,6 +388,86 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
               );
             }),
 
+            // 3.6 Dynamic Threat Radar Indicator alerts triggered by Sonar sweep passes
+            ..._monsterShadows.map((shadow) {
+              final double posX = shadow.mapX * screenSize.width;
+              final double posY = shadow.mapY * mapHeight;
+              
+              // Compute angle of monster relative to map center
+              final double monsterAngle = math.atan2(posY - midY, posX - midX);
+              double normMonsterAngle = monsterAngle;
+              if (normMonsterAngle < 0) normMonsterAngle += 2 * math.pi;
+
+              return AnimatedBuilder(
+                animation: _radarSweepController,
+                builder: (context, child) {
+                  final angle = _radarSweepController.value * 2 * math.pi;
+                  double angleDiff = angle - normMonsterAngle;
+                  if (angleDiff < 0) angleDiff += 2 * math.pi;
+
+                  // Sweep zone is 1.5 radians after the sweep line passes
+                  double detectionIntensity = 0.0;
+                  if (angleDiff < 1.5) {
+                    detectionIntensity = 1.0 - (angleDiff / 1.5);
+                  }
+
+                  if (detectionIntensity <= 0) return const SizedBox.shrink();
+
+                  return Positioned(
+                    left: posX - 40,
+                    top: posY - 40,
+                    child: SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Threat Pulse Alert circle ring
+                          Container(
+                            width: 14 + (24 * (1.0 - detectionIntensity)),
+                            height: 14 + (24 * (1.0 - detectionIntensity)),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFFF3366).withValues(alpha: detectionIntensity),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          // Alert target dot
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFFF3366).withValues(alpha: detectionIntensity),
+                            ),
+                          ),
+                          // Warning HUD tag
+                          Positioned(
+                            bottom: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              color: Colors.black.withValues(alpha: 0.8),
+                              child: Text(
+                                "THREAT LOCK",
+                                style: TextStyle(
+                                  color: const Color(0xFFFF3366).withValues(alpha: detectionIntensity),
+                                  fontSize: 7.0,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            }),
+
             // 4. Hotspots (Tapped coordinates)
             ...dataService.oceans.map((ocean) {
               final double posX = ocean.mapX * (screenSize.width - 32.0);
@@ -354,106 +475,249 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
               final bool isSelected = _selectedOcean?.id == ocean.id;
 
               return Positioned(
-                left: posX - 25,
-                top: posY - 25,
-                child: GestureDetector(
-                  onTap: () => _selectOcean(ocean),
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: 50,
-                    height: 50,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Outer Pulsing Radar Ring
-                        AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, child) {
-                            return Container(
-                              width: 12 + (_pulseController.value * 28),
-                              height: 12 + (_pulseController.value * 28),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: (isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF))
-                                      .withValues(alpha: 1.0 - _pulseController.value),
-                                  width: 1.5,
+                left: posX - 60, // Center is posX since width is 120
+                top: posY - 30,  // Height is 60, center is posY
+                child: SizedBox(
+                  width: 120,
+                  height: 60,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Active touch hotspot area (50x50) centered in bottom part of stack
+                      Positioned(
+                        width: 50,
+                        height: 50,
+                        top: 10,
+                        child: GestureDetector(
+                          onTap: () => _selectOcean(ocean),
+                          behavior: HitTestBehavior.opaque,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Outer Pulsing Radar Ring
+                              AnimatedBuilder(
+                                animation: _pulseController,
+                                builder: (context, child) {
+                                  return Container(
+                                    width: 12 + (_pulseController.value * 28),
+                                    height: 12 + (_pulseController.value * 28),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: (isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF))
+                                            .withValues(alpha: 1.0 - _pulseController.value),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              // Inner pulsing solid ring
+                              AnimatedBuilder(
+                                animation: _pulseController,
+                                builder: (context, child) {
+                                  return Container(
+                                    width: 8 + (_pulseController.value * 12),
+                                    height: 8 + (_pulseController.value * 12),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: (isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF))
+                                          .withValues(alpha: 0.25 * (1.0 - _pulseController.value)),
+                                    ),
+                                  );
+                                },
+                              ),
+                              // Center Core Hotspot
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                        // Inner pulsing solid ring
-                        AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, child) {
-                            return Container(
-                              width: 8 + (_pulseController.value * 12),
-                              height: 8 + (_pulseController.value * 12),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: (isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF))
-                                    .withValues(alpha: 0.25 * (1.0 - _pulseController.value)),
-                              ),
-                            );
-                          },
-                        ),
-                        // Center Core Hotspot
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-                            boxShadow: [
-                              BoxShadow(
-                                color: isSelected ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-                                blurRadius: 8,
-                                spreadRadius: 2,
                               ),
                             ],
                           ),
                         ),
-                        // Label name above hotspot
-                        Positioned(
-                          top: 4,
-                          child: Text(
-                            ocean.getName(strings.languageCode),
-                            style: TextStyle(
-                              color: isSelected ? const Color(0xFFFF3366) : Colors.white70,
-                              fontSize: 8.0,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'monospace',
-                              backgroundColor: Colors.black.withValues(alpha: 0.75),
+                      ),
+                      // Floating Label (up to 120px wide, centered, will not cut off)
+                      Positioned(
+                        top: 0,
+                        child: IgnorePointer(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            color: Colors.black.withValues(alpha: 0.75),
+                            child: Text(
+                              ocean.getName(strings.languageCode),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isSelected ? const Color(0xFFFF3366) : Colors.white70,
+                                fontSize: 9.5, // 9.5 is perfectly balanced and readable
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                              ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               );
             }),
+            // 5. Target Lock-On HUD Overlay
+            _buildTargetLockOnReticle(screenSize),
           ],
         ),
       ),
     );
   }
 
+  Widget _buildTargetLockOnReticle(Size screenSize) {
+    if (_selectedOcean == null) return const SizedBox.shrink();
+    
+    final mapWidth = screenSize.width;
+    final mapHeight = screenSize.width * 0.95;
+    final double posX = _selectedOcean!.mapX * mapWidth;
+    final double posY = _selectedOcean!.mapY * mapHeight;
+
+    return AnimatedBuilder(
+      animation: _lockOnController,
+      builder: (context, child) {
+        final val = _lockOnController.value; // 0.0 to 1.0
+        if (val <= 0.0) return const SizedBox.shrink();
+
+        // Shrinking size from 75 down to 26
+        final double boxSize = 75.0 - (val * 49.0);
+        // Rotation angle
+        final double rotation = (1.0 - val) * math.pi;
+
+        return Positioned(
+          left: posX - boxSize / 2,
+          top: posY - boxSize / 2,
+          child: IgnorePointer(
+            child: SizedBox(
+              width: boxSize,
+              height: boxSize,
+              child: Transform.rotate(
+                angle: rotation,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Brackets in corners
+                    Positioned(
+                      top: 0, left: 0,
+                      child: Container(
+                        width: 8, height: 8,
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                            top: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0, right: 0,
+                      child: Container(
+                        width: 8, height: 8,
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                            top: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0, left: 0,
+                      child: Container(
+                        width: 8, height: 8,
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                            bottom: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0, right: 0,
+                      child: Container(
+                        width: 8, height: 8,
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                            bottom: BorderSide(color: Color(0xFFFF3366), width: 1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Centered tiny Lock text
+                    if (val >= 0.85)
+                      Positioned(
+                        bottom: -12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          color: Colors.black,
+                          child: const Text(
+                            "LOCK",
+                            style: TextStyle(
+                              color: Color(0xFFFF3366),
+                              fontSize: 7.0,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Positioned(
+                        bottom: -12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          color: Colors.black,
+                          child: const Text(
+                            "LOCKING...",
+                            style: TextStyle(
+                              color: Color(0xFF00F0FF),
+                              fontSize: 7.0,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildEmptyStateCard() {
     final strings = AppStrings.of(context);
-    return Container(
-      key: const ValueKey("empty_state"),
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      height: 220,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF020813),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF00F0FF).withValues(alpha: 0.1),
-        ),
-      ),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+        child: Container(
+          key: const ValueKey("empty_state"),
+          margin: EdgeInsets.zero,
+          height: 220,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: const Color(0xFF020813).withValues(alpha: 0.45),
+          ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -467,7 +731,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
             strings.radarScan,
             style: const TextStyle(
               color: Color(0xFF00F0FF),
-              fontSize: 14.0,
+              fontSize: 16.0,
               fontWeight: FontWeight.bold,
               letterSpacing: 2.0,
               fontFamily: 'monospace',
@@ -480,7 +744,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
               strings.radarInstruction,
               style: const TextStyle(
                 color: Colors.white54,
-                fontSize: 11.5,
+                fontSize: 13.5,
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
@@ -488,29 +752,29 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildOceanDetailsCard(Ocean ocean) {
     final strings = AppStrings.of(context);
-    return Container(
-      key: ValueKey("ocean_${ocean.id}"),
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFF020A18),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFF00F0FF).withValues(alpha: 0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF00F0FF).withValues(alpha: 0.06),
-            blurRadius: 24,
-            spreadRadius: 2,
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+        child: Container(
+          key: ValueKey("ocean_${ocean.id}"),
+          margin: EdgeInsets.zero,
+          decoration: BoxDecoration(
+            color: const Color(0xFF020A18).withValues(alpha: 0.45),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00F0FF).withValues(alpha: 0.06),
+                blurRadius: 24,
+                spreadRadius: 2,
+              ),
+            ],
           ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -522,22 +786,13 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF0D2340).withValues(alpha: 0.95),
-                  const Color(0xFF040F1E).withValues(alpha: 0.95),
+                  const Color(0xFF0D2340).withValues(alpha: 0.45),
+                  const Color(0xFF040F1E).withValues(alpha: 0.45),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(19),
-                topRight: Radius.circular(19),
-              ),
-              border: Border(
-                bottom: BorderSide(
-                  color: const Color(0xFF00F0FF).withValues(alpha: 0.35),
-                  width: 1.0,
-                ),
-              ),
+
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,7 +812,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                       ocean.coordinates,
                       style: const TextStyle(
                         color: Color(0xFF00F0FF),
-                        fontSize: 9.5,
+                        fontSize: 15.0,
                         fontFamily: 'monospace',
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.5,
@@ -666,7 +921,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                               strings.languageCode == 'en' ? "DEEP ABYSS SPECTACLE" : "CHIÊM NGƯỠNG LÒNG VỰC SÂU",
                               style: const TextStyle(
                                 color: Colors.black,
-                                fontSize: 14.0,
+                                fontSize: 16.0,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: 1.5,
                               ),
@@ -686,13 +941,8 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Container(
               height: 42,
-              decoration: BoxDecoration(
-                color: const Color(0xFF030D1C),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
-                  width: 1,
-                ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF030D1C),
               ),
               child: Row(
                 children: [
@@ -726,7 +976,9 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildTabItem(int index, String label, IconData icon) {
@@ -748,13 +1000,9 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
           curve: Curves.easeInOut,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
             color: isActive 
                 ? activeColor.withValues(alpha: 0.12)
                 : Colors.transparent,
-            border: isActive
-                ? Border.all(color: activeColor.withValues(alpha: 0.4), width: 1)
-                : Border.all(color: Colors.transparent, width: 1),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -769,7 +1017,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                 label,
                 style: TextStyle(
                   color: isActive ? Colors.white : Colors.white30,
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'monospace',
                   letterSpacing: 0.5,
@@ -795,11 +1043,6 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
               padding: const EdgeInsets.all(14.0),
               decoration: BoxDecoration(
                 color: const Color(0xFF0A1B2E).withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: const Color(0xFFFF3366).withValues(alpha: 0.3),
-                  width: 1.0,
-                ),
               ),
               child: Column(
                 children: [
@@ -811,7 +1054,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                         strings.languageCode == 'en' ? "DEEPEST POINT OF SYSTEM" : "ĐIỂM SÂU NHẤT HỆ THỐNG",
                         style: const TextStyle(
                           color: Color(0xFFFF3366),
-                          fontSize: 9.5,
+                          fontSize: 15.0,
                           fontWeight: FontWeight.bold,
                           fontFamily: 'monospace',
                           letterSpacing: 1.2,
@@ -831,7 +1074,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                           ocean.deepestPointDepth,
                           style: const TextStyle(
                             color: Color(0xFFFF3366),
-                            fontSize: 13.0,
+                            fontSize: 15.0,
                             fontWeight: FontWeight.w900,
                             fontFamily: 'monospace',
                           ),
@@ -968,8 +1211,6 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
@@ -983,7 +1224,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                   label,
                   style: const TextStyle(
                     color: Colors.white30,
-                    fontSize: 8.0,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'monospace',
                   ),
@@ -993,7 +1234,7 @@ class _OceanMapScreenState extends State<OceanMapScreen> with TickerProviderStat
                   value,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 13.0,
+                    fontSize: 15.0,
                     fontWeight: FontWeight.w900,
                     fontFamily: 'monospace',
                   ),
@@ -1107,22 +1348,16 @@ class _FullOceanFloorViewerState extends State<_FullOceanFloorViewer> {
             ),
           ),
 
-          // 5. Bottom sliding carousel information overlay
+          // 5. Bottom sliding carousel information overlay (full width, borderless, sharp)
           Positioned(
-            bottom: MediaQuery.of(context).padding.bottom + 20,
-            left: 16,
-            right: 16,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: Container(
               height: 210,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: EdgeInsets.fromLTRB(16, 14, 16, MediaQuery.of(context).padding.bottom + 14),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: (_currentPage == 2 ? const Color(0xFFFF3366) : const Color(0xFF00F0FF))
-                      .withValues(alpha: 0.35),
-                  width: 1.5,
-                ),
                 boxShadow: [
                   BoxShadow(
                     color: (_currentPage == 2 ? const Color(0xFFFF3366) : const Color(0xFF00F0FF))
@@ -1202,7 +1437,7 @@ class _FullOceanFloorViewerState extends State<_FullOceanFloorViewer> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Color(0xFF00F0FF),
-                  fontSize: 12.5,
+                  fontSize: 15.0,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.0,
                 ),
@@ -1213,7 +1448,7 @@ class _FullOceanFloorViewerState extends State<_FullOceanFloorViewer> {
               widget.ocean.coordinates,
               style: const TextStyle(
                 color: Color(0xFF00F0FF),
-                fontSize: 9.5,
+                fontSize: 15.0,
                 fontFamily: 'monospace',
                 fontWeight: FontWeight.bold,
               ),
@@ -1230,7 +1465,7 @@ class _FullOceanFloorViewerState extends State<_FullOceanFloorViewer> {
                   : "Độ sâu điểm khảo sát cực đại đạt ${widget.ocean.deepestPointDepth} tại '${widget.ocean.getDeepestPointName(strings.languageCode)}'. Tầm nhìn bằng rađa siêu âm hạn chế. Áp suất tĩnh cực lớn.",
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.8),
-                fontSize: 11.5,
+                fontSize: 13.5,
                 height: 1.5,
               ),
             ),
@@ -1252,7 +1487,7 @@ class _FullOceanFloorViewerState extends State<_FullOceanFloorViewer> {
               strings.languageCode == 'en' ? "GEOLOGICAL SURVEY PROFILE" : "HỒ SƠ KHẢO SÁT ĐỊA CHẤT",
               style: const TextStyle(
                 color: Color(0xFF00F0FF),
-                fontSize: 12.0,
+                fontSize: 15.0,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'monospace',
                 letterSpacing: 1.0,
@@ -1286,7 +1521,7 @@ class _FullOceanFloorViewerState extends State<_FullOceanFloorViewer> {
               strings.languageCode == 'en' ? "THALASSOPHOBIA WARNING" : "CẢNH BÁO HỘI CHỨNG BIỂN SÂU",
               style: const TextStyle(
                 color: Color(0xFFFF3366),
-                fontSize: 12.0,
+                fontSize: 15.0,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'monospace',
                 letterSpacing: 1.0,
@@ -1323,6 +1558,52 @@ class _ButtonScanlinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _SonarSweepPainter extends CustomPainter {
+  final double angle;
+  _SonarSweepPainter({required this.angle});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double midX = size.width / 2;
+    final double midY = size.height / 2;
+    final double radius = math.sqrt(midX * midX + midY * midY);
+
+    final Paint paint = Paint()..style = PaintingStyle.fill;
+
+    // Drawing a SweepGradient to simulate the rotating radar beam trail
+    final rect = Rect.fromCircle(center: Offset(midX, midY), radius: radius);
+    final sweepGradient = SweepGradient(
+      center: Alignment.center,
+      startAngle: 0.0,
+      endAngle: 2 * math.pi,
+      colors: [
+        const Color(0xFF00F0FF).withValues(alpha: 0.0),
+        const Color(0xFF00F0FF).withValues(alpha: 0.18),
+      ],
+      stops: const [0.0, 1.0],
+      transform: GradientRotation(angle - math.pi / 2), // Rotate based on animation angle
+    );
+
+    paint.shader = sweepGradient.createShader(rect);
+    canvas.drawCircle(Offset(midX, midY), radius, paint);
+
+    // Also draw the sweeping line itself at the front of the sweep
+    final Paint linePaint = Paint()
+      ..color = const Color(0xFF00F0FF).withValues(alpha: 0.45)
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke;
+
+    final double sweepX = midX + radius * math.cos(angle);
+    final double sweepY = midY + radius * math.sin(angle);
+    canvas.drawLine(Offset(midX, midY), Offset(sweepX, sweepY), linePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SonarSweepPainter oldDelegate) {
+    return oldDelegate.angle != angle;
+  }
 }
 
 class _RadarGridPainter extends CustomPainter {

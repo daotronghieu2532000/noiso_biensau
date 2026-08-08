@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import '../l10n/app_strings.dart';
 
 class OceanDescriptionWidget extends StatefulWidget {
@@ -117,7 +118,7 @@ class _OceanDescriptionWidgetState extends State<OceanDescriptionWidget>
     return RichText(
       text: TextSpan(
         style: const TextStyle(
-          fontSize: 12.0,
+          fontSize: 14.0,
           height: 1.6,
           fontFamily: 'monospace',
         ),
@@ -152,127 +153,120 @@ class _OceanDescriptionWidgetState extends State<OceanDescriptionWidget>
           icon = Icons.waves_outlined;
         }
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12.0),
-          decoration: BoxDecoration(
-            color: const Color(0xFF030D1C).withValues(alpha: 0.65),
-            borderRadius: const BorderRadius.only(
-              topRight: Radius.circular(12),
-              bottomLeft: Radius.circular(12),
-            ),
-            border: Border.all(
-              color: widget.themeColor.withValues(alpha: 0.15),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.themeColor.withValues(alpha: 0.02),
-                blurRadius: 8,
-                spreadRadius: 1,
+        return ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12.0),
+              decoration: BoxDecoration(
+                color: const Color(0xFF030D1C).withValues(alpha: 0.35),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.themeColor.withValues(alpha: 0.02),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              // Holographic watermark icon
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Opacity(
-                  opacity: 0.05,
-                  child: Icon(icon, color: widget.themeColor, size: 36),
-                ),
-              ),
-              
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Stack(
+                children: [
+                  // Holographic watermark icon
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Opacity(
+                      opacity: 0.05,
+                      child: Icon(icon, color: widget.themeColor, size: 36),
+                    ),
+                  ),
+                  
+                  // Content
+                  Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildBlinkingLed(widget.themeColor),
-                            const SizedBox(width: 6),
+                            Row(
+                              children: [
+                                _buildBlinkingLed(widget.themeColor),
+                                const SizedBox(width: 6),
+                                Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: widget.themeColor,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace',
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
                             Text(
-                              label,
+                              "SURVEY_LOG // 0x${(idx + 1) * 47}F",
                               style: TextStyle(
-                                color: widget.themeColor,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
+                                color: Colors.white.withValues(alpha: 0.15),
+                                fontSize: 7.5,
                                 fontFamily: 'monospace',
-                                letterSpacing: 1.1,
                               ),
                             ),
                           ],
                         ),
-                        Text(
-                          "SURVEY_LOG // 0x${(idx + 1) * 47}F",
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            fontSize: 7.5,
-                            fontFamily: 'monospace',
-                          ),
+                        const SizedBox(height: 4),
+                        Divider(color: widget.themeColor.withValues(alpha: 0.08), thickness: 1),
+                        const SizedBox(height: 4),
+                        _buildHighlightedText(
+                          paragraphs[idx],
+                          Colors.white,
+                          const Color(0xFF00F0FF), // Highlight color
+                          isEn,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 1.0,
+                              color: widget.themeColor.withValues(alpha: 0.2),
+                            ),
+                            const SizedBox(width: 4),
+                            Container(
+                              width: 3,
+                              height: 1.0,
+                              color: widget.themeColor.withValues(alpha: 0.2),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Divider(color: widget.themeColor.withValues(alpha: 0.08), thickness: 1),
-                    const SizedBox(height: 4),
-                    _buildHighlightedText(
-                      paragraphs[idx],
-                      Colors.white,
-                      const Color(0xFF00F0FF), // Highlight color
-                      isEn,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 1.0,
-                          color: widget.themeColor.withValues(alpha: 0.2),
-                        ),
-                        const SizedBox(width: 4),
-                        Container(
-                          width: 3,
-                          height: 1.0,
-                          color: widget.themeColor.withValues(alpha: 0.2),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Glowing neon left bar
-              Positioned(
-                left: 0,
-                top: 10,
-                bottom: 10,
-                child: Container(
-                  width: 2.5,
-                  decoration: BoxDecoration(
-                    color: widget.themeColor,
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(2),
-                      bottomRight: Radius.circular(2),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: widget.themeColor.withValues(alpha: 0.5),
-                        blurRadius: 3,
-                        spreadRadius: 0.5,
-                      ),
-                    ],
                   ),
-                ),
+
+                  // Glowing neon left bar
+                  Positioned(
+                    left: 0,
+                    top: 10,
+                    bottom: 10,
+                    child: Container(
+                      width: 2.5,
+                      decoration: BoxDecoration(
+                        color: widget.themeColor,
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.themeColor.withValues(alpha: 0.5),
+                            blurRadius: 3,
+                            spreadRadius: 0.5,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       }),
@@ -366,7 +360,7 @@ class _ThalassophobiaWarningWidgetState extends State<ThalassophobiaWarningWidge
     return RichText(
       text: TextSpan(
         style: const TextStyle(
-          fontSize: 11.5,
+          fontSize: 14.0,
           height: 1.5,
           fontFamily: 'monospace',
         ),
@@ -385,86 +379,86 @@ class _ThalassophobiaWarningWidgetState extends State<ThalassophobiaWarningWidge
         final Color warningColor = const Color(0xFFFF3366);
         final double glowVal = _glowAnimation.value;
 
-        return Container(
-          padding: const EdgeInsets.all(12.0),
-          decoration: BoxDecoration(
-            color: warningColor.withValues(alpha: 0.03 + (0.02 * glowVal)),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: warningColor.withValues(alpha: 0.15 + (0.35 * glowVal)),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: warningColor.withValues(alpha: 0.05 * glowVal),
-                blurRadius: 10,
-                spreadRadius: 1,
+        return ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+            child: Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: warningColor.withValues(alpha: 0.05 + (0.03 * glowVal)),
+                boxShadow: [
+                  BoxShadow(
+                    color: warningColor.withValues(alpha: 0.05 * glowVal),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              // Corner bracket designs (telemetry vibe)
-              Positioned(
-                left: 0,
-                top: 0,
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(color: warningColor, width: 1.5),
-                      top: BorderSide(color: warningColor, width: 1.5),
+              child: Stack(
+                children: [
+                  // Corner bracket designs (telemetry vibe)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: warningColor, width: 1.5),
+                          top: BorderSide(color: warningColor, width: 1.5),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      right: BorderSide(color: warningColor, width: 1.5),
-                      bottom: BorderSide(color: warningColor, width: 1.5),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: warningColor, width: 1.5),
+                          bottom: BorderSide(color: warningColor, width: 1.5),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                  
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: warningColor.withValues(alpha: 0.5 + (0.5 * glowVal)),
-                          size: 16,
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: warningColor.withValues(alpha: 0.5 + (0.5 * glowVal)),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isEn ? "THALASSOPHOBIA WARNING" : "CẢNH BÁO HỘI CHỨNG SỢ BIỂN SÂU",
+                              style: TextStyle(
+                                color: warningColor,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isEn ? "THALASSOPHOBIA WARNING" : "CẢNH BÁO HỘI CHỨNG SỢ BIỂN SÂU",
-                          style: TextStyle(
-                            color: warningColor,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                            letterSpacing: 1.2,
-                          ),
-                        ),
+                        const SizedBox(height: 8),
+                        _buildWarningText(widget.warningText, isEn),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    _buildWarningText(widget.warningText, isEn),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/creature.dart';
+import '../widgets/cached_video_player.dart';
 import '../services/data_service.dart';
 import '../services/sound_service.dart';
 import '../l10n/app_strings.dart';
@@ -587,7 +588,6 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.listen(context);
-    final themeColor = const Color(0xFFFF3366);
 
     return Scaffold(
       backgroundColor: const Color(0xFF020813),
@@ -623,12 +623,12 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
 
                   return Stack(
                     children: [
-                      // 1. Left Fighter Card (Top-Left) - Expanded Width
+                      // 1. Left Fighter Card (Top, full-width, zero border radius, Cover fit video)
                       Positioned(
-                        left: 12,
-                        top: 12,
-                        width: W - 24,
-                        height: H * 0.40,
+                        left: 0,
+                        top: 0,
+                        width: W,
+                        height: H * 0.44,
                         child: _buildCombatantCard(
                           creature: _leftCreature!,
                           isLeft: true,
@@ -641,141 +641,122 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                         ),
                       ),
 
-                      // 2. Horizontal Middle Row (COMBAT / VS / RANDOM / RESET)
+                      // 2. Control Bar (Middle, centered - Apple Minimalist Style)
                       Positioned(
                         left: 12,
                         right: 12,
-                        top: H * 0.40 + 20,
+                        top: H * 0.44 + 8,
                         height: 48,
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // COMBAT button
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: SizedBox(
-                                  width: W * 0.34,
-                                  height: 44,
-                                  child: ElevatedButton(
-                                    onPressed: (_isBattleActive || _isBattleOver) ? null : _startBattle,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF00F0FF),
-                                      disabledBackgroundColor: Colors.grey.withValues(alpha: 0.2),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(24.0),
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(Icons.play_arrow, color: Colors.black, size: 18),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          strings.languageCode == 'vi' ? 'QUYẾT ĐẤU' : 'COMBAT',
-                                          style: const TextStyle(
-                                            color: Colors.black,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 11,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                            // COMBAT button (Apple Prominent Blue)
+                            SizedBox(
+                              width: W * 0.35,
+                              height: 38,
+                              child: ElevatedButton(
+                                onPressed: (_isBattleActive || _isBattleOver) ? null : _startBattle,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0A84FF), // iOS Dark Mode Blue
+                                  foregroundColor: Colors.white,
+                                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.05),
+                                  disabledForegroundColor: Colors.white24,
+                                  elevation: 0,
+                                  shadowColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
                                   ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      strings.languageCode == 'vi' ? 'Quyết Đấu' : 'Combat',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                             
                             // Center: VS Badge
                             Container(
-                              width: 48,
-                              height: 48,
+                              width: 34,
+                              height: 34,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: Colors.black,
+                                color: Colors.white.withValues(alpha: 0.06),
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: themeColor,
-                                  width: 1.5,
+                                  color: Colors.white24,
+                                  width: 1.0,
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: themeColor.withValues(alpha: 0.6),
-                                    blurRadius: 10.0,
-                                    spreadRadius: 1.5,
-                                  ),
-                                ],
                               ),
                               child: const Text(
                                 'VS',
                                 style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 14.0,
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11.0,
                                 ),
                               ),
                             ),
                             
-                            // RANDOM button and RESET button
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: SizedBox(
-                                  width: W * 0.34 + 10,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Expanded(
-                                        child: SizedBox(
-                                          height: 44,
-                                          child: ElevatedButton(
-                                            onPressed: _isBattleActive ? null : _randomizePair,
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFFFF3366),
-                                              disabledBackgroundColor: Colors.grey.withValues(alpha: 0.2),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(24.0),
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                const Icon(Icons.shuffle, color: Colors.white, size: 16),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  strings.languageCode == 'vi' ? 'ĐỔI CẶP' : 'RANDOM',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 11,
-                                                    letterSpacing: 0.5,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
+                            // RANDOM button (Apple Tinted Translucent Grey)
+                            SizedBox(
+                              width: W * 0.35,
+                              height: 38,
+                              child: ElevatedButton(
+                                onPressed: _isBattleActive ? null : _randomizePair,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                                  foregroundColor: Colors.white,
+                                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.03),
+                                  disabledForegroundColor: Colors.white12,
+                                  elevation: 0,
+                                  shadowColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.shuffle_rounded, color: Colors.white, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      strings.languageCode == 'vi' ? 'Đổi Cặp' : 'Random',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
                                       ),
-                                      const SizedBox(width: 6),
-                                      SizedBox(
-                                        width: 40,
-                                        height: 40,
-                                        child: IconButton(
-                                          onPressed: _isBattleActive ? null : _resetBattle,
-                                          icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: Colors.white.withValues(alpha: 0.08),
-                                            padding: EdgeInsets.zero,
-                                            side: BorderSide(
-                                              color: Colors.white.withValues(alpha: 0.15),
-                                              width: 1.0,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            
+                            // RESET button
+                            SizedBox(
+                              width: 38,
+                              height: 38,
+                              child: IconButton(
+                                onPressed: _isBattleActive ? null : _resetBattle,
+                                icon: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 18),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                                  padding: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
                                   ),
                                 ),
                               ),
@@ -784,100 +765,12 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
                         ),
                       ),
 
-                      // 3. Tactical Report Console (Bottom-Left) - Dynamic Height
+                      // 3. Right Fighter Card (Below Control Bar, full-width, zero border radius, Cover fit video)
                       Positioned(
-                        left: 12,
-                        top: H * 0.40 + 76,
-                        bottom: 12,
-                        width: W * 0.36,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF010610),
-                            borderRadius: BorderRadius.circular(15.0),
-                            border: Border.all(
-                              color: const Color(0xFF00F0FF).withValues(alpha: 0.2),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF030B1C),
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(13.0)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        strings.languageCode == 'vi' ? 'BÁO CÁO' : 'CONSOLE',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Color(0xFF00F0FF),
-                                          fontSize: 9.0,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 1.0,
-                                        ),
-                                      ),
-                                    ),
-                                    const Icon(
-                                      Icons.circle,
-                                      color: Colors.green,
-                                      size: 6.0,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: _battleLogs.isEmpty
-                                      ? Center(
-                                          child: Text(
-                                            strings.languageCode == 'vi'
-                                                ? 'Sẵn sàng...'
-                                                : 'Ready...',
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.3),
-                                              fontSize: 10.0,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                        )
-                                      : ListView.builder(
-                                          controller: _logScrollController,
-                                          itemCount: _battleLogs.length,
-                                          itemBuilder: (context, index) {
-                                            return Padding(
-                                              padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                              child: Text(
-                                                _battleLogs[index],
-                                                style: const TextStyle(
-                                                  color: Color(0xFF00FF7F),
-                                                  fontSize: 10.0,
-                                                  fontFamily: 'monospace',
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // 4. Right Fighter Card (Bottom-Right) - Dynamic Height
-                      Positioned(
-                        right: 12,
-                        top: H * 0.40 + 76,
-                        bottom: 12,
-                        width: W * 0.58,
+                        left: 0,
+                        top: H * 0.44 + 8 + 48 + 8,
+                        width: W,
+                        height: H * 0.44,
                         child: _buildCombatantCard(
                           creature: _rightCreature!,
                           isLeft: false,
@@ -913,18 +806,415 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
     
     final Color sideColor = isLeft ? const Color(0xFF00F0FF) : const Color(0xFFFF3366);
 
+    // Winner/Loser status logic
+    final bool isWinner = _isBattleOver && ((isLeft && _leftHP > 0) || (!isLeft && _rightHP > 0));
+    final bool isLoser = _isBattleOver && ((isLeft && _leftHP <= 0 && _rightHP > 0) || (!isLeft && _rightHP <= 0 && _leftHP > 0));
+    final bool isDraw = _isBattleOver && _leftHP <= 0 && _rightHP <= 0;
+    final bool useGrayscale = isLoser || isDraw;
+
+    final Widget cardBody = Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Selector/Profile Header
+            GestureDetector(
+              onTap: () => _showCreatureSelectDialog(isLeft: isLeft),
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.3),
+                padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: sideColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12.0,
+                        ),
+                      ),
+                    ),
+                    if (!_isBattleActive)
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.white60,
+                        size: 16,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 2. Avatar Area
+            Expanded(
+              flex: 5,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Transform.scale(
+                    scale: isLeft ? 1.35 : 1.0,
+                    child: creature.videoUrl.isNotEmpty
+                        ? CachedCreatureVideoPlayer(
+                            key: ValueKey(creature.id),
+                            videoUrl: creature.videoUrl,
+                            disableMask: true,
+                            fit: BoxFit.cover,
+                            placeholder: creature.buildImage(
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.black,
+                                  child: const Icon(Icons.broken_image, color: Colors.white38),
+                                );
+                              },
+                            ),
+                          )
+                        : creature.buildImage(
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.black,
+                                child: const Icon(Icons.broken_image, color: Colors.white38),
+                              );
+                            },
+                          ),
+                  ),
+                  
+                  // Red Flash overlay when hit
+                  if (flashRed)
+                    Container(
+                      color: Colors.red.withValues(alpha: 0.4),
+                    ),
+                  
+                  // Active combat effect animations
+                  ..._activeEffects
+                      .where((e) => e['isLeft'] == isLeft)
+                      .map((e) => CombatEffectOverlay(
+                            key: ValueKey(e['id']),
+                            type: e['type'],
+                            onComplete: () {
+                              setState(() {
+                                _activeEffects.removeWhere((item) => item['id'] == e['id']);
+                              });
+                            },
+                          )),
+
+                  // Shield Overlay Indicator
+                  if (shieldActive)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: const Color(0xFF00F0FF),
+                            width: 4.0,
+                          ),
+                          color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+                        ),
+                        child: Center(
+                          child: Image.asset(
+                            'assets/images/icon/shield.png',
+                            width: 40.0,
+                            height: 40.0,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Rage Overlay Indicator (Moved to left: 8)
+                  if (rageActive)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4.0),
+                        decoration: BoxDecoration(
+                          color: Colors.orange,
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                        child: Image.asset(
+                          'assets/images/icon/battery.png',
+                          width: 16.0,
+                          height: 16.0,
+                        ),
+                      ),
+                    ),
+
+                  // Floating Skill Buttons Column (Action Strip overlayed on the right side of the video)
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    right: 0,
+                    width: 48,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5), // Glass dark background
+                        border: const Border(
+                          left: BorderSide(color: Colors.white10, width: 1.0),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          // HEAL
+                          _buildSkillButton(
+                            icon: Opacity(
+                              opacity: (isLeft ? _leftHasHeal : _rightHasHeal) ? 1.0 : 0.35,
+                              child: Image.asset(
+                                'assets/images/icon/heal.png',
+                                width: 20,
+                                height: 20,
+                              ),
+                            ),
+                            color: Colors.green,
+                            isActive: isLeft ? _leftHasHeal : _rightHasHeal,
+                            onTap: isLeft ? _useLeftHeal : _useRightHeal,
+                            tooltip: 'HEAL',
+                          ),
+                          // SHIELD
+                          _buildSkillButton(
+                            icon: Opacity(
+                              opacity: (isLeft ? _leftHasShield : _rightHasShield) ? 1.0 : 0.35,
+                              child: Image.asset(
+                                'assets/images/icon/shield.png',
+                                width: 20,
+                                height: 20,
+                              ),
+                            ),
+                            color: const Color(0xFF00F0FF),
+                            isActive: isLeft ? _leftHasShield : _rightHasShield,
+                            onTap: isLeft ? _useLeftShield : _useRightShield,
+                            tooltip: 'SHIELD',
+                          ),
+                          // RAGE
+                          _buildSkillButton(
+                            icon: Opacity(
+                              opacity: (isLeft ? _leftHasRage : _rightHasRage) ? 1.0 : 0.35,
+                              child: Image.asset(
+                                'assets/images/icon/battery.png',
+                                width: 20,
+                                height: 20,
+                              ),
+                            ),
+                            color: Colors.orange,
+                            isActive: isLeft ? _leftHasRage : _rightHasRage,
+                            onTap: isLeft ? _useLeftRage : _useRightRage,
+                            tooltip: 'RAGE',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Floating Damage Texts
+                  ..._damagePopups
+                      .where((p) => p['isLeft'] == isLeft)
+                      .map((p) => Positioned(
+                            top: 60.0,
+                            child: FloatingDamageText(
+                              key: ValueKey(p['id']),
+                              damage: p['damage'],
+                              isLeft: isLeft,
+                              onComplete: () {
+                                setState(() {
+                                  _damagePopups.removeWhere((item) => item['id'] == p['id']);
+                                });
+                              },
+                            ),
+                          )),
+                ],
+              ),
+            ),
+
+            // 3. Health bar & Text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'HP',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${currentHP.toInt()}/${maxHP.toInt()}',
+                        style: TextStyle(
+                          color: currentHP <= (maxHP * 0.25) ? Colors.red : Colors.green,
+                          fontSize: 10.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2.0),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4.0),
+                    child: LinearProgressIndicator(
+                      value: hpPercent,
+                      minHeight: 6.0,
+                      backgroundColor: Colors.white24,
+                      color: hpPercent <= 0.25 ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // 5. Miniature numerical stats list
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 6.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatIndicator(
+                    icon: Icons.flash_on,
+                    value: isLeft ? _leftAttack.toInt() : _rightAttack.toInt(),
+                    color: Colors.orange,
+                  ),
+                  _buildStatIndicator(
+                    icon: Icons.shield_outlined,
+                    value: isLeft ? _leftDefense.toInt() : _rightDefense.toInt(),
+                    color: Colors.blue,
+                  ),
+                  _buildStatIndicator(
+                    icon: Icons.speed,
+                    value: isLeft ? _leftSpeed.toInt() : _rightSpeed.toInt(),
+                    color: Colors.purple,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        // ── VICTORY/DEFEAT/DRAW OVERLAY FILTERS ───────────────────────────
+        if (isWinner)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.18),
+                border: Border.all(color: Colors.amber, width: 2.5),
+              ),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF030A18).withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(8.0),
+                    border: Border.all(color: Colors.amber, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🏆', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 6),
+                      Text(
+                        strings.languageCode == 'vi' ? 'CHIẾN THẮNG' : 'VICTOR',
+                        style: const TextStyle(
+                          color: Colors.amber,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        if (isLoser)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.55),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(6.0),
+                    border: Border.all(color: Colors.white24, width: 1.0),
+                  ),
+                  child: Text(
+                    strings.languageCode == 'vi' ? 'BẠI TRẬN' : 'DEFEATED',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        if (isDraw)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.45),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(6.0),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5), width: 1.0),
+                  ),
+                  child: Text(
+                    strings.languageCode == 'vi' ? 'HÒA NHAU' : 'MUTUAL KO',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+
     return Transform.translate(
       offset: Offset(shakeX, 0.0),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
         decoration: BoxDecoration(
           color: const Color(0xFF030B1C),
-          borderRadius: BorderRadius.circular(16.0),
-          border: Border.all(
-            color: flashRed 
-                ? Colors.red 
-                : sideColor.withValues(alpha: _isBattleActive ? 0.8 : 0.3),
-            width: 2.0,
+          borderRadius: BorderRadius.zero,
+          border: Border(
+            top: BorderSide(
+              color: flashRed 
+                  ? Colors.red 
+                  : sideColor.withValues(alpha: _isBattleActive ? 0.8 : 0.3),
+              width: 1.5,
+            ),
+            bottom: BorderSide(
+              color: flashRed 
+                  ? Colors.red 
+                  : sideColor.withValues(alpha: _isBattleActive ? 0.8 : 0.3),
+              width: 1.5,
+            ),
           ),
           boxShadow: [
             if (_isBattleActive)
@@ -935,269 +1225,17 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
               ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. Selector/Profile Header
-              GestureDetector(
-                onTap: () => _showCreatureSelectDialog(isLeft: isLeft),
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: sideColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12.0,
-                          ),
-                        ),
-                      ),
-                      if (!_isBattleActive)
-                        const Icon(
-                          Icons.arrow_drop_down,
-                          color: Colors.white60,
-                          size: 16,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 2. Avatar Area
-              Expanded(
-                flex: 5,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Transform.scale(
-                      scale: isLeft ? 1.35 : 1.0,
-                      child: creature.buildImage(
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.black,
-                            child: const Icon(Icons.broken_image, color: Colors.white38),
-                          );
-                        },
-                      ),
-                    ),
-                    
-                    // Red Flash overlay when hit
-                    if (flashRed)
-                      Container(
-                        color: Colors.red.withValues(alpha: 0.4),
-                      ),
-                    
-                    // Active combat effect animations
-                    ..._activeEffects
-                        .where((e) => e['isLeft'] == isLeft)
-                        .map((e) => CombatEffectOverlay(
-                              key: ValueKey(e['id']),
-                              type: e['type'],
-                              onComplete: () {
-                                setState(() {
-                                  _activeEffects.removeWhere((item) => item['id'] == e['id']);
-                                });
-                              },
-                            )),
-
-                      // Shield Overlay Indicator
-                      if (shieldActive)
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: const Color(0xFF00F0FF),
-                                width: 4.0,
-                              ),
-                              color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
-                            ),
-                            child: Center(
-                              child: Image.asset(
-                                'assets/images/icon/shield.png',
-                                width: 40.0,
-                                height: 40.0,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      // Rage Overlay Indicator
-                      if (rageActive)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4.0),
-                            decoration: BoxDecoration(
-                              color: Colors.orange,
-                              borderRadius: BorderRadius.circular(4.0),
-                            ),
-                            child: Image.asset(
-                              'assets/images/icon/battery.png',
-                              width: 16.0,
-                              height: 16.0,
-                            ),
-                          ),
-                        ),
-
-                    // Floating Damage Texts
-                    ..._damagePopups
-                        .where((p) => p['isLeft'] == isLeft)
-                        .map((p) => Positioned(
-                              top: 60.0,
-                              child: FloatingDamageText(
-                                key: ValueKey(p['id']),
-                                damage: p['damage'],
-                                isLeft: isLeft,
-                                onComplete: () {
-                                  setState(() {
-                                    _damagePopups.removeWhere((item) => item['id'] == p['id']);
-                                  });
-                                },
-                              ),
-                            )),
-                  ],
-                ),
-              ),
-
-              // 3. Health bar & Text
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'HP',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          '${currentHP.toInt()}/${maxHP.toInt()}',
-                          style: TextStyle(
-                            color: currentHP <= (maxHP * 0.25) ? Colors.red : Colors.green,
-                            fontSize: 10.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2.0),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4.0),
-                      child: LinearProgressIndicator(
-                        value: hpPercent,
-                        minHeight: 6.0,
-                        backgroundColor: Colors.white24,
-                        color: hpPercent <= 0.25 ? Colors.red : Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 4. Interactive Support skills
-              Container(
-                color: Colors.black.withValues(alpha: 0.4),
-                padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 4.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // HEAL
-                        _buildSkillButton(
-                          icon: Opacity(
-                            opacity: (isLeft ? _leftHasHeal : _rightHasHeal) ? 1.0 : 0.35,
-                            child: Image.asset(
-                              'assets/images/icon/heal.png',
-                              width: 24,
-                              height: 24,
-                            ),
-                          ),
-                          color: Colors.green,
-                          isActive: isLeft ? _leftHasHeal : _rightHasHeal,
-                          onTap: isLeft ? _useLeftHeal : _useRightHeal,
-                          tooltip: 'HEAL',
-                        ),
-                        // SHIELD
-                        _buildSkillButton(
-                          icon: Opacity(
-                            opacity: (isLeft ? _leftHasShield : _rightHasShield) ? 1.0 : 0.35,
-                            child: Image.asset(
-                              'assets/images/icon/shield.png',
-                              width: 24,
-                              height: 24,
-                            ),
-                          ),
-                          color: const Color(0xFF00F0FF),
-                          isActive: isLeft ? _leftHasShield : _rightHasShield,
-                          onTap: isLeft ? _useLeftShield : _useRightShield,
-                          tooltip: 'SHIELD',
-                        ),
-                        // RAGE
-                        _buildSkillButton(
-                          icon: Opacity(
-                            opacity: (isLeft ? _leftHasRage : _rightHasRage) ? 1.0 : 0.35,
-                            child: Image.asset(
-                              'assets/images/icon/battery.png',
-                              width: 24,
-                              height: 24,
-                            ),
-                          ),
-                          color: Colors.orange,
-                          isActive: isLeft ? _leftHasRage : _rightHasRage,
-                          onTap: isLeft ? _useLeftRage : _useRightRage,
-                          tooltip: 'RAGE',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              
-              // 5. Miniature numerical stats list
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 6.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildStatIndicator(
-                      icon: Icons.flash_on,
-                      value: isLeft ? _leftAttack.toInt() : _rightAttack.toInt(),
-                      color: Colors.orange,
-                    ),
-                    _buildStatIndicator(
-                      icon: Icons.shield_outlined,
-                      value: isLeft ? _leftDefense.toInt() : _rightDefense.toInt(),
-                      color: Colors.blue,
-                    ),
-                    _buildStatIndicator(
-                      icon: Icons.speed,
-                      value: isLeft ? _leftSpeed.toInt() : _rightSpeed.toInt(),
-                      color: Colors.purple,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: useGrayscale
+            ? ColorFiltered(
+                colorFilter: const ColorFilter.matrix(<double>[
+                  0.2126, 0.7152, 0.0722, 0, 0,
+                  0.2126, 0.7152, 0.0722, 0, 0,
+                  0.2126, 0.7152, 0.0722, 0, 0,
+                  0,      0,      0,      1, 0,
+                ]),
+                child: cardBody,
+              )
+            : cardBody,
       ),
     );
   }
@@ -1212,10 +1250,16 @@ class _BattleScreenState extends State<BattleScreen> with TickerProviderStateMix
     return GestureDetector(
       onTap: isActive ? onTap : null,
       child: Container(
-        padding: const EdgeInsets.all(6.0),
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isActive ? color.withValues(alpha: 0.15) : Colors.white10,
+          border: Border.all(
+            color: isActive ? color.withValues(alpha: 0.4) : Colors.white12,
+            width: 1.0,
+          ),
         ),
         child: icon,
       ),

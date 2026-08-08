@@ -7,6 +7,7 @@ import '../widgets/size_comparison_widget.dart';
 import '../widgets/structured_description_widget.dart';
 import '../l10n/app_strings.dart';
 import 'settings_screen.dart';
+import '../widgets/cached_video_player.dart';
 
 class DetailScreen extends StatefulWidget {
   final Creature creature;
@@ -140,25 +141,37 @@ class _DetailScreenState extends State<DetailScreen>
                   Hero(
                     tag: 'creature_${widget.creature.id}',
                     child: Transform.scale(
-                      scale:
-                          (widget.creature.id == 'godzilla' ||
-                              widget.creature.id == 'ghost_leviathan' ||
-                              widget.creature.id == 'lagiacrus')
-                          ? 1.35
-                          : 1.35,
-                      child: widget.creature.buildImage(
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: const Color(0xFF0D1F3D),
-                            child: const Icon(
-                              Icons.broken_image,
-                              color: Colors.white24,
-                              size: 60,
+                      scale: 1.35,
+                      child: widget.creature.videoUrl.isNotEmpty
+                          ? CachedCreatureVideoPlayer(
+                              videoUrl: widget.creature.videoUrl,
+                              placeholder: widget.creature.buildImage(
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: const Color(0xFF0D1F3D),
+                                    child: const Icon(
+                                      Icons.broken_image,
+                                      color: Colors.white24,
+                                      size: 60,
+                                    ),
+                                  );
+                                },
+                              ),
+                            )
+                          : widget.creature.buildImage(
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: const Color(0xFF0D1F3D),
+                                  child: const Icon(
+                                    Icons.broken_image,
+                                    color: Colors.white24,
+                                    size: 60,
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ),
 

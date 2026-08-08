@@ -8,6 +8,7 @@ import '../services/data_service.dart';
 import '../services/sound_service.dart';
 import '../l10n/app_strings.dart';
 import 'settings_screen.dart';
+import '../widgets/cached_video_player.dart';
 
 class SonarScreen extends StatefulWidget {
   const SonarScreen({super.key});
@@ -709,16 +710,27 @@ class _SonarScreenState extends State<SonarScreen>
                         ),
                       ),
                       
-                      // Giant creature image with scale
+                      // Giant creature video/image with scale
                       Transform.scale(
                         scale: 1.25,
-                        child: creature.buildImage(
-                          width: screenWidth * 0.88,
-                          height: screenHeight * 0.45,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Icon(Icons.waves, color: themeColor, size: 80),
-                        ),
+                        child: creature.videoUrl.isNotEmpty
+                            ? CachedCreatureVideoPlayer(
+                                videoUrl: creature.videoUrl,
+                                placeholder: creature.buildImage(
+                                  width: screenWidth * 0.88,
+                                  height: screenHeight * 0.45,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Icon(Icons.waves, color: themeColor, size: 80),
+                                ),
+                              )
+                            : creature.buildImage(
+                                width: screenWidth * 0.88,
+                                height: screenHeight * 0.45,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Icon(Icons.waves, color: themeColor, size: 80),
+                              ),
                       ),
 
                       // Holographic bracket painter around the giant creature image
