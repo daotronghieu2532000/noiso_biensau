@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../services/data_service.dart';
 import '../services/sound_service.dart';
 import '../l10n/app_strings.dart';
+import '../widgets/cached_video_player.dart';
 import 'settings_screen.dart';
 
 class SimulatorScreen extends StatefulWidget {
@@ -74,6 +76,7 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat();
+    _preloadMonsterVideos();
   }
 
   @override
@@ -176,26 +179,39 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
     });
   }
 
+  void _preloadMonsterVideos() {
+    for (final url in [
+      'https://codego.io.vn/api/uploads/videos/Rise%20of%20The%20Kraken%20%23creative%20%23vfx%20%23movie%20%23kraken%23monster.mp4',
+      'https://codego.io.vn/api/uploads/videos/S%C3%AD%2C%20conozco%20la%20historia%20de%20Cthulhu%2C%20una%20de%20las%20criaturas%20m%C3%A1s%20ic%C3%B3nicas%20creadas%20por%20el%20escritor%20H.%20P.%20Lovecraft.%20Aqu%C3%AD%20te%20la%20cuento%20de%20forma%20clara%20v%C3%A0%20perturbadora%2C%20como%20suele%20gustar%20en%20tus%20contenidos-%20%20Qui%C3%A9n%20es%20Cthulhu.mp4',
+      'https://codego.io.vn/api/uploads/videos/Livyatan%20%20The%20Giant%20Killer%20Whale%20of%20the%20Miocene%20%20Livyatan%20melvillei%20was%20a%20massive%20predatory%20whale%20that%20lived%20about%201213%20million%20years%20ago%20in%20the%20Miocene%20seas%20off%20Peru.%20It%20was%20one%20of%20the%20top%20ocean%20predators%20of%20its%20t.mp4',
+      'https://codego.io.vn/api/uploads/videos/Lo%20que%20vimos%20desde%20el%20helic%C3%B3ptero%20nos%20dej%C3%B3%20sin%20alienti!%20%20Una%20criatura%20extra%C3%B1a%20tipo%20drag%C3%B3n%20marino%20luchando%20contra%20un%20pulpo%20gigante%20en%20el%20Pac%C3%ADfico.%20Inolvidable!%20%20%23Misterio%20%23Terror%20%23Mar%20%23impactante%20-------------------.mp4',
+      'https://codego.io.vn/api/uploads/videos/Cient%C3%ADficos%20quedaron%20impactados%20al%20registrar%20esta%20extra%C3%B1a%20criatura%20en%20las%20profundidades%20del%20oc%C3%A9ano.%20Una%20recente%20expedici%C3%B3n%20cient%C3%ADfica%20realizada%20por%20investigadores%20de%20Australia%20en%20una%20zona%20remota%20del%20Oc%C3%A9ano%20%C3%8Dndico%20.mp4',
+    ]) {
+      final cacheBusterUrl = url.contains('?') ? '$url&cb=1.0.4_v1' : '$url?cb=1.0.4_v1';
+      DefaultCacheManager().getSingleFile(cacheBusterUrl).then((_) {}, onError: (e) {});
+    }
+  }
+
   void _triggerDepthEvents() {
-    // Occur randomly
-    if (_random.nextDouble() > 0.12) return;
+    // Occur randomly with higher frequency for exciting gameplay
+    if (_random.nextDouble() > 0.35) return;
     final isEn = AppStrings.of(context).languageCode == 'en';
 
     if (_depth > 500 && _depth < 1000 && !_logs.any((l) => l.contains('TWILIGHT') || l.contains('Hoàng Hôn'))) {
       _addLog(isEn ? 'WARNING: Entering the Twilight Zone. Sunlight fades away.' : 'CẢNH BÁO: Đi vào vùng Hoàng Hôn (Twilight Zone). Ánh sáng mặt trời tắt dần.');
       _activeThreat = 'twilight';
-      _threatTicks = 6;
+      _threatTicks = 12;
     }
     else if (_depth > 1000 && _depth < 1500 && !_logs.any((l) => l.contains('MIDNIGHT') || l.contains('Nửa Đêm'))) {
       _addLog(isEn ? 'WARNING: Entering the Midnight Zone. High-power spotlights engaged.' : 'CẢNH BÁO: Đi vào vùng Nửa Đêm (Midnight Zone). Bật đèn pha công suất cao.');
       _soundService.playCreatureSound("low_pressure.m4a");
       _activeThreat = 'midnight';
-      _threatTicks = 6;
+      _threatTicks = 14;
     }
-    else if (_depth > 1500 && _depth < 3000 && _random.nextDouble() < 0.3) {
+    else if (_depth > 1500 && _depth < 3000 && _random.nextDouble() < 0.45) {
       _addLog(isEn ? 'HAZARD: Encountered boiling underwater hydrothermal vent plume!' : 'SỰ CỐ: Gặp luồng phun thủy nhiệt ngầm sục sôi!');
       _activeThreat = 'vent';
-      _threatTicks = 6;
+      _threatTicks = 16;
       _soundService.playCreatureSound("shark_heartbeat.mp3");
       if (_shieldActive) {
         _addLog(isEn ? 'SHIELD: Thermal vent impact absorbed by electromagnetic deflector.' : 'KÝ HIỆU: Lá chắn hấp thụ chấn động thủy nhiệt.');
@@ -207,10 +223,10 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
         _triggerShake(intensity: 8.0);
       }
     }
-    else if (_depth > 3000 && _depth < 4500 && _random.nextDouble() < 0.25) {
+    else if (_depth > 3000 && _depth < 4500 && _random.nextDouble() < 0.45) {
       _addLog(isEn ? 'DETECTION: Hostile pack of prehistoric sharks surrounding the vessel!' : 'PHÁT HIỆN: Đàn cá mập cổ đại hung tợn vây quanh tàu!');
       _activeThreat = 'shark';
-      _threatTicks = 6;
+      _threatTicks = 18;
       _soundService.playCreatureSound("shark_heartbeat.mp3");
       if (_shieldActive) {
         _addLog(isEn ? 'SHIELD: Electromagnetic screen repelled the shark pack.' : 'KÝ HIỆU: Lá chắn điện từ đẩy lùi đàn cá mập.');
@@ -222,10 +238,10 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
         _triggerShake(intensity: 10.0);
       }
     }
-    else if (_depth > 4500 && _depth < 7000 && _random.nextDouble() < 0.3) {
+    else if (_depth > 4500 && _depth < 7000 && _random.nextDouble() < 0.45) {
       _addLog(isEn ? 'WARNING: Massive biomass tremor signature. Kraken leviathan approaching!' : 'CẢNH BÁO: Phát hiện chấn động biomass lớn. Thủy quái Kraken đang áp sát!');
       _activeThreat = 'kraken';
-      _threatTicks = 6;
+      _threatTicks = 18;
       _soundService.playCreatureSound("leviathan_groan.mp3");
       if (_shieldActive) {
         _addLog(isEn ? 'SHIELD: Electromagnetic shield deflected Kraken constricting wrap.' : 'KÝ HIỆU: Lá chắn chặn đứng cú quấn siết của Kraken.');
@@ -237,19 +253,19 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
         _triggerShake(intensity: 14.0);
       }
     }
-    else if (_depth > 7000 && _depth < 9500 && _random.nextDouble() < 0.3) {
+    else if (_depth > 7000 && _depth < 9500 && _random.nextDouble() < 0.45) {
       _addLog(isEn ? 'WARNING: Ultra-low frequency infrasound "The Bloop" swept through!' : 'CẢNH BÁO: Sóng siêu âm tần số cực thấp "The Bloop" quét qua!');
       _activeThreat = 'bloop';
-      _threatTicks = 6;
+      _threatTicks = 18;
       _soundService.playCreatureSound("leviathan_groan.mp3");
       _energy = (_energy - 0.25).clamp(0.0, 1.0);
       _addLog(isEn ? 'SYS: Severe electromagnetic interference! Battery cells drained by 25%!' : 'SYS: Nhiễu loạn điện từ cực mạnh! Năng lượng dự trữ giảm 25%!');
       _triggerShake(intensity: 5.0);
     }
-    else if (_depth >= 9500 && _random.nextDouble() < 0.35) {
+    else if (_depth >= 9500 && _random.nextDouble() < 0.5) {
       _addLog(isEn ? 'WARNING: Eerie telepathic feedback from Old God Cthulhu detected!' : 'CẢNH BÁO: Tín hiệu thần giao cách cảm ma quái của Tà Thần Cthulhu!');
       _activeThreat = 'cthulhu';
-      _threatTicks = 6;
+      _threatTicks = 18;
       _soundService.playCreatureSound("leviathan_groan.mp3");
       if (_shieldActive) {
         _addLog(isEn ? 'SHIELD: Psychic ward blocked Cthulhu mental disturbance.' : 'KÝ HIỆU: Hào quang tâm linh chặn đứng tác động từ Cthulhu.');
@@ -832,6 +848,27 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
     );
   }
 
+  String? _getThreatVideoUrl(String? threat) {
+    if (threat == null) return null;
+    switch (threat) {
+      case 'kraken':
+        return 'https://codego.io.vn/api/uploads/videos/Rise%20of%20The%20Kraken%20%23creative%20%23vfx%20%23movie%20%23kraken%23monster.mp4';
+      case 'cthulhu':
+        return 'https://codego.io.vn/api/uploads/videos/S%C3%AD%2C%20conozco%20la%20historia%20de%20Cthulhu%2C%20una%20de%20las%20criaturas%20m%C3%A1s%20ic%C3%B3nicas%20creadas%20por%20el%20escritor%20H.%20P.%20Lovecraft.%20Aqu%C3%AD%20te%20la%20cuento%20de%20forma%20clara%20v%C3%A0%20perturbadora%2C%20como%20suele%20gustar%20en%20tus%20contenidos-%20%20Qui%C3%A9n%20es%20Cthulhu.mp4';
+      case 'shark':
+        return 'https://codego.io.vn/api/uploads/videos/Livyatan%20%20The%20Giant%20Killer%20Whale%20of%20the%20Miocene%20%20Livyatan%20melvillei%20was%20a%20massive%20predatory%20whale%20that%20lived%20about%201213%20million%20years%20ago%20in%20the%20Miocene%20seas%20off%20Peru.%20It%20was%20one%20of%20the%20top%20ocean%20predators%20of%20its%20t.mp4';
+      case 'bloop':
+        return 'https://codego.io.vn/api/uploads/videos/Lo%20que%20vimos%20desde%20el%20helic%C3%B3ptero%20nos%20dej%C3%B3%20sin%20alienti!%20%20Una%20criatura%20extra%C3%B1a%20tipo%20drag%C3%B3n%20marino%20luchando%20contra%20un%20pulpo%20gigante%20en%20el%20Pac%C3%ADfico.%20Inolvidable!%20%20%23Misterio%20%23Terror%20%23Mar%20%23impactante%20-------------------.mp4';
+      case 'vent':
+        return 'https://codego.io.vn/api/uploads/videos/Cient%C3%ADficos%20quedaron%20impactados%20al%20registrar%20esta%20extra%C3%B1a%20criatura%20en%20las%20profundidades%20del%20oc%C3%A9ano.%20Una%20recente%20expedici%C3%B3n%20cient%C3%ADfica%20realizada%20por%20investigadores%20de%20Australia%20en%20una%20zona%20remota%20del%20Oc%C3%A9ano%20%C3%8Dndico%20.mp4';
+      case 'twilight':
+      case 'midnight':
+        return 'https://codego.io.vn/api/uploads/videos/Enjoy%20your%20deepest%20fears%E2%80%A6%20%23ai%20%23deepocean%20%23scifi%23kraken%23films.mp4';
+      default:
+        return null;
+    }
+  }
+
   Widget _buildAbyssViewport() {
     // Determine gradient background based on depth
     Color topColor;
@@ -876,6 +913,8 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
     } else if (_activeThreat == 'cthulhu') {
       monsterAsset = 'assets/images/creatures/Cthulhu.png';
     }
+
+    final String? monsterVideoUrl = _getThreatVideoUrl(_activeThreat);
 
     return AspectRatio(
       aspectRatio: 1.3,
@@ -943,8 +982,41 @@ class _SimulatorScreenState extends State<SimulatorScreen> with SingleTickerProv
               },
             ),
 
-            // 4. Creature silhouette overlay
-            if (monsterAsset != null)
+            // 4. Creature video / silhouette attack overlay
+            if (_activeThreat != null && monsterVideoUrl != null)
+              Positioned.fill(
+                child: AnimatedOpacity(
+                  opacity: 0.85,
+                  duration: const Duration(milliseconds: 400),
+                  child: ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      _shieldActive
+                          ? const Color(0xFF00F0FF).withValues(alpha: 0.25)
+                          : const Color(0xFFFF3366).withValues(alpha: 0.3),
+                      BlendMode.srcATop,
+                    ),
+                    child: CachedCreatureVideoPlayer(
+                      key: ValueKey(monsterVideoUrl),
+                      videoUrl: monsterVideoUrl,
+                      disableMask: true,
+                      fit: BoxFit.cover,
+                      placeholder: monsterAsset != null
+                          ? Center(
+                              child: Image.asset(
+                                monsterAsset,
+                                fit: BoxFit.contain,
+                                width: 250,
+                                height: 140,
+                                color: const Color(0xFFFF3366).withValues(alpha: 0.8),
+                                colorBlendMode: BlendMode.srcATop,
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              )
+            else if (monsterAsset != null)
               Center(
                 child: AnimatedOpacity(
                   opacity: _activeThreat != null ? 0.75 : 0.0,

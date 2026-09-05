@@ -69,26 +69,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 
-                // Language selection (Việt Nam)
+                // Language selection (Việt Nam & English on 1 row)
                 _buildSettingRow(
                   icon: Icons.language_rounded,
                   iconBgColor: const Color(0xFF34C759), // Apple Green
-                  title: '🇻🇳  Tiếng Việt',
-                  trailing: locale.languageCode == 'vi'
-                      ? const Icon(Icons.check, color: Color(0xFF00F0FF), size: 20)
-                      : const SizedBox.shrink(),
-                  onTap: () => locale.setLanguage('vi'),
-                ),
-                
-                // Language selection (English)
-                _buildSettingRow(
-                  icon: Icons.language_rounded,
-                  iconBgColor: const Color(0xFF34C759), // Apple Green
-                  title: '🇺🇸  English',
-                  trailing: locale.languageCode == 'en'
-                      ? const Icon(Icons.check, color: Color(0xFF00F0FF), size: 20)
-                      : const SizedBox.shrink(),
-                  onTap: () => locale.setLanguage('en'),
+                  title: isVi ? 'Ngôn ngữ' : 'Language',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildLanguageChip(
+                        label: '🇻🇳 Tiếng Việt',
+                        isSelected: locale.languageCode == 'vi',
+                        onTap: () => locale.setLanguage('vi'),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildLanguageChip(
+                        label: '🇺🇸 English',
+                        isSelected: locale.languageCode == 'en',
+                        onTap: () => locale.setLanguage('en'),
+                      ),
+                    ],
+                  ),
                 ),
               ]),
 
@@ -343,6 +344,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return rowContent;
+  }
+
+  Widget _buildLanguageChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF00F0FF).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF00F0FF) : Colors.white12,
+            width: 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? const Color(0xFF00F0FF) : Colors.white60,
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
   }
 
   void _showResetConfirmationDialog(BuildContext context, bool isVi, DataService dataService) {

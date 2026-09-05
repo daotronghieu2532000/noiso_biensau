@@ -4,12 +4,14 @@ import 'services/data_service.dart';
 import 'services/sound_service.dart';
 import 'services/locale_service.dart';
 import 'services/ad_service.dart';
+import 'services/notification_service.dart';
 import 'widgets/bottom_banner_ad_widget.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.initialize();
   
   runApp(
     MultiProvider(

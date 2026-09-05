@@ -15,6 +15,7 @@ import 'settings_screen.dart';
 import 'battle_screen.dart';
 import 'video_screen.dart';
 import '../widgets/cached_video_player.dart';
+import '../widgets/rating_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,9 +24,10 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final ScrollController _scrollController;
   late final AnimationController _particleController;
+  final ValueNotifier<int> _effectsTicker = ValueNotifier<int>(0);
   
   double _currentDepth = 0.0;
   int _activeMediaTab = 0; // 0 for Image, 1 for Video
@@ -65,6 +67,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    RatingService.incrementLaunchCount();
     _loadVideoIcon();
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
@@ -84,12 +88,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       Provider.of<SoundService>(context, listen: false).playAmbient("shallow_water.mp3");
       // Enable banner display after splash screen
       Provider.of<AdService>(context, listen: false).enableBannerDisplay();
+
+      // Kiểm tra và hiển thị Popup Đánh giá App sau 2 giây
+      Future.delayed(const Duration(seconds: 2), () async {
+        if (!mounted) return;
+        if (await RatingService.shouldShowRating()) {
+          if (!mounted) return;
+          RatingService.showRatingPopup(context);
+        }
+      });
     });
   }
 
   void _initParticles() {
     final size = MediaQuery.of(context).size;
-    for (int i = 0; i < 40; i++) {
+    // Bọt khí nước nhẹ nhàng (20 hạt)
+    for (int i = 0; i < 20; i++) {
       _particles.add(
         _BubbleParticle(
           x: _random.nextDouble() * size.width,
@@ -101,8 +115,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
     }
 
-    // Khởi tạo các hạt Marine Snow (Tuyết biển) rơi từ trên xuống
-    for (int i = 0; i < 35; i++) {
+    // Khởi tạo các hạt Marine Snow (Tuyết biển) rơi nhẹ nhàng (15 hạt)
+    for (int i = 0; i < 15; i++) {
       _marineSnowParticles.add(
         _MarineSnowParticle(
           x: _random.nextDouble() * size.width,
@@ -117,81 +131,69 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
     }
 
-    // Khởi tạo sứa phát quang bơi tự do
+    // Khởi tạo sứa phát quang bơi tự do (4 con)
     final List<Color> jellyColors = [
       const Color(0xFF00E5FF), // Cyan phát sáng
       const Color(0xFFD500F9), // Tím phát sáng
       const Color(0xFF00E676), // Xanh lá phát sáng
       const Color(0xFFFF4081), // Hồng neon
-      const Color(0xFFFFD740), // Vàng hổ phách
     ];
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 4; i++) {
       _jellyfishes.add(
         _BioluminescentJellyfish(
           x: _random.nextDouble() * size.width,
           y: size.height * 0.1 + _random.nextDouble() * size.height * 0.8,
-          size: _random.nextDouble() * 22 + 12, // Kích thước phong phú từ 12 đến 34
-          speedY: _random.nextDouble() * 0.22 + 0.1,
+          size: _random.nextDouble() * 20 + 12,
+          speedY: _random.nextDouble() * 0.2 + 0.1,
           speedX: (_random.nextDouble() - 0.5) * 0.05,
           pulseOffset: _random.nextDouble() * 2 * math.pi,
-          pulseSpeed: _random.nextDouble() * 1.3 + 0.7,
+          pulseSpeed: _random.nextDouble() * 1.2 + 0.7,
           glowColor: jellyColors[i % jellyColors.length],
         ),
       );
     }
 
-    // Khởi tạo các đàn cá bơi lội và cá đơn lẻ
+    // Khởi tạo các đàn cá bơi lội và cá đơn lẻ (Tối ưu nhẹ nhàng)
     final List<Color> fishColors = [
       const Color(0xFF00FFFF), // Cyan
       const Color(0xFFFF4081), // Pink neon
       const Color(0xFF00E676), // Xanh lá phát sáng
-      const Color(0xFFFFD740), // Vàng hổ phách
     ];
 
-    // 1. Tạo các đàn cá (3 đàn)
-    for (int school = 0; school < 3; school++) {
-      final double schoolY = size.height * 0.15 + _random.nextDouble() * size.height * 0.7;
-      final bool direction = _random.nextBool();
-      final double schoolSpeed = _random.nextDouble() * 0.8 + 0.6;
-      final Color schoolColor = fishColors[school % fishColors.length];
-      final double schoolBaseX = direction ? -150.0 : size.width + 50.0;
-      final double baseSize = _random.nextDouble() * 5 + 6; // 6 đến 11 pixels
-
-      final int numFishInSchool = _random.nextInt(6) + 6; // 6 đến 11 con mỗi đàn
-      for (int i = 0; i < numFishInSchool; i++) {
-        final double offsetX = (_random.nextDouble() - 0.5) * 80;
-        final double offsetY = (_random.nextDouble() - 0.5) * 40;
-        _swimmingFishes.add(
-          _SwimmingFish(
-            x: schoolBaseX + offsetX,
-            y: schoolY + offsetY,
-            speed: schoolSpeed + (_random.nextDouble() - 0.5) * 0.15,
-            size: baseSize + (_random.nextDouble() - 0.5) * 2,
-            opacity: _random.nextDouble() * 0.3 + 0.5,
-            isMovingRight: direction,
-            color: schoolColor,
-            wiggleOffset: _random.nextDouble() * 2 * math.pi,
-            wiggleSpeed: _random.nextDouble() * 2 + 3,
-            schoolId: school,
-          ),
-        );
-      }
+    // 1. Tạo 1 đàn cá xinh xắn (5 con)
+    final double schoolY = size.height * 0.3;
+    final double schoolBaseX = -100.0;
+    for (int i = 0; i < 5; i++) {
+      _swimmingFishes.add(
+        _SwimmingFish(
+          x: schoolBaseX + (i * 15.0),
+          y: schoolY + (i % 2 * 10.0),
+          speed: 0.8,
+          size: 8.0,
+          opacity: 0.7,
+          isMovingRight: true,
+          color: const Color(0xFF00FFFF),
+          wiggleOffset: i * 0.5,
+          wiggleSpeed: 3.0,
+          schoolId: 0,
+        ),
+      );
     }
 
-    // 2. Tạo cá đơn lẻ (15 con)
-    for (int i = 0; i < 15; i++) {
+    // 2. Tạo cá đơn lẻ (6 con)
+    for (int i = 0; i < 6; i++) {
       final bool direction = _random.nextBool();
       _swimmingFishes.add(
         _SwimmingFish(
           x: _random.nextDouble() * size.width,
           y: size.height * 0.1 + _random.nextDouble() * size.height * 0.8,
-          speed: _random.nextDouble() * 0.7 + 0.4,
-          size: _random.nextDouble() * 8 + 8, // 8 đến 16 pixels
-          opacity: _random.nextDouble() * 0.4 + 0.4,
+          speed: _random.nextDouble() * 0.6 + 0.4,
+          size: _random.nextDouble() * 6 + 8,
+          opacity: 0.6,
           isMovingRight: direction,
-          color: fishColors[_random.nextInt(fishColors.length)],
+          color: fishColors[i % fishColors.length],
           wiggleOffset: _random.nextDouble() * 2 * math.pi,
-          wiggleSpeed: _random.nextDouble() * 2 + 2,
+          wiggleSpeed: 2.5,
           schoolId: -1,
         ),
       );
@@ -271,21 +273,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final size = MediaQuery.of(context).size;
     
     // Sinking factor: tốc độ bọt khí thay đổi nhẹ khi cuộn
-    double scrollSpeedFactor = 1.0;
-
-    setState(() {
-      // Cập nhật vết nứt kính lặn điện thoại động dưới áp suất cực lớn
-      if (_currentDepth > 7000 && size.width > 0) {
-        if (_crackSpawnCooldown > 0) {
-          _crackSpawnCooldown--;
-        }
-        
-        // Tạo vết nứt mới ngẫu nhiên nếu hết cooldown (tối đa 2 vết nứt đồng thời)
-        if (_crackSpawnCooldown <= 0 && _activeCracks.length < 2) {
-          _activeCracks.add(_generateSingleCrack(size, _random));
-          _crackSpawnCooldown = 200 + _random.nextInt(200); // 3 đến 6 giây
-        }
+    // Cập nhật vị trí các hạt hiệu ứng và phát tín hiệu cho RepaintBoundary (Không setState HomeScreen)
+    if (_currentDepth > 7000 && size.width > 0) {
+      if (_crackSpawnCooldown > 0) {
+        _crackSpawnCooldown--;
       }
+      
+      // Tạo vết nứt mới ngẫu nhiên nếu hết cooldown (tối đa 2 vết nứt đồng thời)
+      if (_crackSpawnCooldown <= 0 && _activeCracks.length < 2) {
+        _activeCracks.add(_generateSingleCrack(size, _random));
+        _crackSpawnCooldown = 200 + _random.nextInt(200); // 3 đến 6 giây
+      }
+    }
       
       // Tiến trình cập nhật vòng đời vết nứt (Xuất hiện, Tồn tại, Biến mất)
       for (int i = _activeCracks.length - 1; i >= 0; i--) {
@@ -317,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
       // 1. Cập nhật bọt khí (Bay lên)
       for (var particle in _particles) {
-        particle.y -= particle.speed * scrollSpeedFactor;
+        particle.y -= particle.speed;
         particle.x += math.sin(particle.y / 30) * 0.2;
         
         if (particle.y < -10) {
@@ -484,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
 
 
-    });
+    _effectsTicker.value++;
   }
 
   void _onScroll() {
@@ -554,9 +553,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     _particleController.dispose();
+    _effectsTicker.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_particleController.isAnimating) {
+        _particleController.stop();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_particleController.isAnimating) {
+        _particleController.repeat();
+      }
+    }
   }
 
   _ActiveGlassCrack _generateSingleCrack(Size size, math.Random random) {
@@ -706,21 +720,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           // Background Leviathan Shadow (Bóng thủy quái lướt qua dưới tầng nước sâu thẳm)
           IgnorePointer(
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _LeviathanShadowPainter(
-                leviathan: _leviathan,
-                animationValue: _particleController.value,
+            child: RepaintBoundary(
+              child: ValueListenableBuilder<int>(
+                valueListenable: _effectsTicker,
+                builder: (context, _, __) {
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: _LeviathanShadowPainter(
+                      leviathan: _leviathan,
+                      animationValue: _particleController.value,
+                    ),
+                  );
+                },
               ),
             ),
           ),
           // Background Abyssal Eye (Mắt quỷ biển sâu khổng lồ ẩn hiện phía sau)
           IgnorePointer(
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _AbyssalEyePainter(
-                eye: _abyssalEye,
-                animationValue: _particleController.value,
+            child: RepaintBoundary(
+              child: ValueListenableBuilder<int>(
+                valueListenable: _effectsTicker,
+                builder: (context, _, __) {
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: _AbyssalEyePainter(
+                      eye: _abyssalEye,
+                      animationValue: _particleController.value,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -1004,44 +1032,63 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
 
           IgnorePointer(
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _UnderwaterEffectsPainter(
-                bubbles: _particles,
-                marineSnow: _marineSnowParticles,
-                jellyfishes: _jellyfishes,
-                fishes: _swimmingFishes,
-                oceanCurrents: _oceanCurrents,
-                waterSurfaceY: _scrollController.hasClients ? (550.0 - _scrollController.offset) : 550.0,
-                depth: _currentDepth,
-                animationValue: _particleController.value,
+            child: RepaintBoundary(
+              child: ValueListenableBuilder<int>(
+                valueListenable: _effectsTicker,
+                builder: (context, _, __) {
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: _UnderwaterEffectsPainter(
+                      bubbles: _particles,
+                      marineSnow: _marineSnowParticles,
+                      jellyfishes: _jellyfishes,
+                      fishes: _swimmingFishes,
+                      oceanCurrents: _oceanCurrents,
+                      waterSurfaceY: _scrollController.hasClients ? (550.0 - _scrollController.offset) : 550.0,
+                      depth: _currentDepth,
+                      animationValue: _particleController.value,
+                    ),
+                  );
+                },
               ),
             ),
           ),
 
           // Swaying Seaweed / Abyssal Vines Overlay framing the left and right edges
           IgnorePointer(
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _SeaweedPainter(
-                scrollOffset: _scrollController.hasClients ? _scrollController.offset : 0.0,
-                animationValue: _particleController.value,
-                waterSurfaceY: _scrollController.hasClients ? (550.0 - _scrollController.offset) : 550.0,
+            child: RepaintBoundary(
+              child: ValueListenableBuilder<int>(
+                valueListenable: _effectsTicker,
+                builder: (context, _, __) {
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: _SeaweedPainter(
+                      scrollOffset: _scrollController.hasClients ? _scrollController.offset : 0.0,
+                      animationValue: _particleController.value,
+                      waterSurfaceY: _scrollController.hasClients ? (550.0 - _scrollController.offset) : 550.0,
+                    ),
+                  );
+                },
               ),
             ),
           ),
 
-
-
           // Viewport Pressure Cracks Overlay (vết nứt kính)
           if (_currentDepth > 7000)
             IgnorePointer(
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _PressureCracksPainter(
-                  depth: _currentDepth,
-                  animationValue: _particleController.value,
-                  cracks: _activeCracks,
+              child: RepaintBoundary(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _effectsTicker,
+                  builder: (context, _, __) {
+                    return CustomPaint(
+                      size: Size.infinite,
+                      painter: _PressureCracksPainter(
+                        depth: _currentDepth,
+                        animationValue: _particleController.value,
+                        cracks: _activeCracks,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1084,7 +1131,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ),
 
-          // 4. Floating HUD: Audio Ambient Controller
+          // 4. Floating HUD: Audio Ambient Controller (Scale 0.8 - Icon 26x26)
           Positioned(
             left: 8.0,
             top: MediaQuery.of(context).padding.top + 16.0,
@@ -1096,18 +1143,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   : [const Color(0xFF00E5FF), const Color(0xFF006064)],
               borderColor: soundService.isMuted ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
               onTap: () => soundService.toggleMute(),
+              scale: 0.8,
               child: Opacity(
                 opacity: soundService.isMuted ? 0.4 : 1.0,
                 child: Image.asset(
                   'assets/images/icon/medium-volume.png',
-                  width: 36,
-                  height: 36,
+                  width: 26,
+                  height: 26,
                 ),
               ),
             ),
           ),
 
-          // 4b. Floating HUD: Dashboard Control Console Button (Menu)
+          // 4b. Floating HUD: Dashboard Control Console Button - Thuyền (Scale 1.45 - Icon 52x52)
           Positioned(
             right: 8.0,
             top: MediaQuery.of(context).padding.top + 72.0,
@@ -1117,15 +1165,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               gradientColors: const [Color(0xFF00B0FF), Color(0xFF2962FF)],
               borderColor: const Color(0xFF00F0FF),
               onTap: () => _navigateTo(const DashboardScreen()),
+              scale: 1.45,
               child: Image.asset(
                 'assets/images/icon/cruise.png',
-                width: 36,
-                height: 36,
+                width: 52,
+                height: 52,
               ),
             ),
           ),
 
-          // 4c. Floating HUD: Settings Button (Symmetric top-right under depth meter)
+          // 4c. Floating HUD: Settings Button - Cài đặt (Scale 0.8 - Icon 26x26)
           Positioned(
             left: 8.0,
             top: MediaQuery.of(context).padding.top + 115.0,
@@ -1135,15 +1184,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               gradientColors: const [Color(0xFF00E676), Color(0xFF00796B)],
               borderColor: const Color(0xFF00F0FF),
               onTap: () => openSettings(context),
+              scale: 0.8,
               child: Image.asset(
                 'assets/images/icon/settings.png',
-                width: 36,
-                height: 36,
+                width: 26,
+                height: 26,
               ),
             ),
           ),
 
-          // 4d. Floating HUD: Battle Mode Button (Left column below dashboard console)
+          // 4d. Floating HUD: Battle Mode Button - Thách đấu (Scale 0.8 - Icon 26x26)
           Positioned(
             left: 8.0,
             top: MediaQuery.of(context).padding.top + 215.0,
@@ -1153,15 +1203,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               gradientColors: const [Color(0xFFFF3366), Color(0xFFC2185B)],
               borderColor: const Color(0xFFFF3366),
               onTap: () => _navigateTo(const BattleScreen()),
+              scale: 0.8,
               child: Image.asset(
                 'assets/images/icon/dragon.png',
-                width: 36,
-                height: 36,
+                width: 26,
+                height: 26,
               ),
             ),
           ),
 
-          // 4e. Floating HUD: Creature Battle Videos Button (Right column below settings button)
+          // 4e. Floating HUD: Creature Battle Videos Button - Rồng (Scale 1.85 - Icon 56x56)
           Positioned(
             right: 8.0,
             top: MediaQuery.of(context).padding.top + 215.0,
@@ -1171,12 +1222,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               gradientColors: const [Color(0xFFE91E63), Color(0xFF9C27B0)],
               borderColor: const Color(0xFF00F0FF),
               onTap: () => _navigateTo(const VideoScreen()),
-              scale: 1.55,
+              scale: 1.85,
               isLava: true,
               child: Image.asset(
                 _videoIcon,
-                width: 36,
-                height: 36,
+                width: 56,
+                height: 56,
               ),
             ),
           ),
@@ -1636,61 +1687,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _handleCardTap(Creature creature) {
     if (creature.isLocked) {
-      _simulateWatchingAd(creature);
+      showVipUnlockBottomSheet(
+        context,
+        onPurchaseSuccess: () {
+          if (mounted) {
+            _navigateTo(DetailScreen(creature: creature));
+          }
+        },
+      );
     } else {
       _navigateTo(DetailScreen(creature: creature));
     }
-  }
-
-  void _simulateWatchingAd(Creature creature) {
-    final strings = AppStrings.of(context);
-    final adService = Provider.of<AdService>(context, listen: false);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF020813),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF3366))),
-              const SizedBox(height: 20),
-              Text(strings.loadingSponsor, style: const TextStyle(color: Colors.white)),
-              const SizedBox(height: 4),
-              Text(strings.pleaseWait, style: const TextStyle(color: Colors.white38, fontSize: 12)),
-            ],
-          ),
-        );
-      },
-    );
-
-    // Give a 1-second delay for premium visual loading before requesting ad
-    Timer(const Duration(milliseconds: 1000), () {
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
-
-      adService.showInterstitialAd(
-        ignoreCooldown: true, // Allow unlocking regardless of cooldown
-        onComplete: () {
-          if (!mounted) return;
-          Provider.of<DataService>(context, listen: false).unlockCreature(creature.id);
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF00F0FF),
-              content: Text(
-                "${strings.unlockSuccess} (${creature.getName(strings.languageCode)})",
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-              ),
-            ),
-          );
-
-          _navigateTo(DetailScreen(creature: creature));
-        },
-      );
-    });
   }
 }
 
@@ -3489,6 +3496,11 @@ class _BalloonHUDButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Vòng tròn chứa (balloonSize) co giãn linh hoạt theo tỷ lệ scale (base 44px)
+    final double balloonSize = 44.0 * scale;
+    final double totalWidth = math.max(60.0, balloonSize + 16.0);
+    final double totalHeight = math.max(100.0, balloonSize + 40.0);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedBuilder(
@@ -3499,8 +3511,8 @@ class _BalloonHUDButton extends StatelessWidget {
           final double swayOffset = math.sin(animationValue * 2 * math.pi * 2.5 + phaseOffset) * 10.0;
           
           return SizedBox(
-            width: 60,
-            height: 100,
+            width: totalWidth,
+            height: totalHeight,
             child: Stack(
               clipBehavior: Clip.none,
               alignment: Alignment.topCenter,
@@ -3515,7 +3527,7 @@ class _BalloonHUDButton extends StatelessWidget {
                     child: CustomPaint(
                       painter: _BalloonStringPainter(
                         swayOffset: swayOffset,
-                        balloonSize: 48.0,
+                        balloonSize: balloonSize,
                         knotColor: const Color(0xFFFFFFFF),
                       ),
                     ),
@@ -3524,15 +3536,16 @@ class _BalloonHUDButton extends StatelessWidget {
                 Positioned(
                   top: 0,
                   child: SizedBox(
-                    width: 48,
-                    height: 48,
+                    width: balloonSize,
+                    height: balloonSize,
                     child: Stack(
                       alignment: Alignment.center,
+                      clipBehavior: Clip.none,
                       children: [
                         // Icon Container
                         Container(
-                          width: 48,
-                          height: 48,
+                          width: balloonSize,
+                          height: balloonSize,
                           decoration: isLava
                               ? const BoxDecoration(
                                   color: Colors.transparent,
@@ -3546,19 +3559,19 @@ class _BalloonHUDButton extends StatelessWidget {
                                   ),
                                 ),
                           alignment: Alignment.center,
-                          child: Transform.scale(
-                            scale: scale,
+                          child: FittedBox(
+                            fit: BoxFit.contain,
                             child: child,
                           ),
                         ),
                         // Glowing Lava Bar at the bottom of the icon
                         if (isLava)
                           Positioned(
-                            bottom: -2,
+                            bottom: -4,
                             left: 0,
                             right: 0,
                             child: SizedBox(
-                              height: 10,
+                              height: 12,
                               child: CustomPaint(
                                 painter: _LavaPainter(
                                   animationValue: animation.value,
