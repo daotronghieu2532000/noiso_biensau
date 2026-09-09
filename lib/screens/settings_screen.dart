@@ -6,6 +6,7 @@ import '../services/locale_service.dart';
 import '../services/sound_service.dart';
 import '../services/data_service.dart';
 import '../l10n/app_strings.dart';
+import 'video_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -129,7 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             GestureDetector(
-                              onTap: () => dataService.buyPremium(),
+                              onTap: () => showVipUnlockBottomSheet(context),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(

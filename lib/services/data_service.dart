@@ -180,6 +180,7 @@ class DataService extends ChangeNotifier {
       if (kDebugMode) {
         print("Error restoring purchases: $e");
       }
+    } finally {
       _isPurchaseLoading = false;
       notifyListeners();
     }

@@ -99,14 +99,26 @@ class _CachedCreatureVideoPlayerState extends State<CachedCreatureVideoPlayer> {
     }
 
     if (widget.disableMask) {
-      return AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        child: FittedBox(
-          fit: widget.fit,
-          child: SizedBox(
-            width: _controller!.value.size.width,
-            height: _controller!.value.size.height,
-            child: VideoPlayer(_controller!),
+      return SizedBox.expand(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          layoutBuilder: (currentChild, previousChildren) => Stack(
+            fit: StackFit.expand,
+            alignment: Alignment.center,
+            children: [
+              ...previousChildren,
+              if (currentChild != null) currentChild,
+            ],
+          ),
+          child: FittedBox(
+            key: ValueKey(_controller?.dataSource ?? widget.videoUrl),
+            fit: widget.fit,
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              width: _controller!.value.size.width,
+              height: _controller!.value.size.height,
+              child: VideoPlayer(_controller!),
+            ),
           ),
         ),
       );

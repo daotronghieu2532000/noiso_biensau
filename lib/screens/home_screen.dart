@@ -1687,14 +1687,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _handleCardTap(Creature creature) {
     if (creature.isLocked) {
-      showVipUnlockBottomSheet(
-        context,
-        onPurchaseSuccess: () {
-          if (mounted) {
-            _navigateTo(DetailScreen(creature: creature));
-          }
-        },
-      );
+      showVipUnlockBottomSheet(context);
     } else {
       _navigateTo(DetailScreen(creature: creature));
     }

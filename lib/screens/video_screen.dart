@@ -38,7 +38,7 @@ class _VideoScreenState extends State<VideoScreen> {
   ];
 
   DataService? _dataService;
-  bool _wasLoading = false;
+  bool _isLoadingDialogShowing = false;
   bool _isSuccessDialogShown = false;
   VoidCallback? _onPurchaseSuccessCallback;
 
@@ -69,14 +69,16 @@ class _VideoScreenState extends State<VideoScreen> {
 
   void _onDataServiceChanged() {
     final dataService = _dataService;
-    if (dataService == null) return;
+    if (dataService == null || !mounted) return;
 
-    if (dataService.isPurchaseLoading && !_wasLoading) {
-      _wasLoading = true;
+    if (dataService.isPurchaseLoading && !_isLoadingDialogShowing) {
+      _isLoadingDialogShowing = true;
       _showLoadingDialog();
-    } else if (!dataService.isPurchaseLoading && _wasLoading) {
-      _wasLoading = false;
-      Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
+    } else if (!dataService.isPurchaseLoading && _isLoadingDialogShowing) {
+      _isLoadingDialogShowing = false;
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog safely
+      }
       
       if (dataService.hasAnyPremium && !_isSuccessDialogShown) {
         _isSuccessDialogShown = true;
@@ -1295,7 +1297,6 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
                               } else {
                                 await ds.buyMonthly();
                               }
-                              onPurchaseSuccess?.call();
                             },
                             child: Text(
                               selectedPlan == 0
