@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'notification_service.dart';
 
 class LocaleService extends ChangeNotifier {
   static const String _langKey = 'app_language';
@@ -22,8 +23,7 @@ class LocaleService extends ChangeNotifier {
       if (systemLocale == 'vi') {
         defaultLang = 'vi';
       }
-    } catch (e) {
-      debugPrint('Error getting system locale: $e');
+    } catch (_) {
     }
     
     final saved = prefs.getString(_langKey) ?? defaultLang;
@@ -37,6 +37,9 @@ class LocaleService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_langKey, code);
     notifyListeners();
+
+    // Tự động đồng bộ lập lịch lại toàn bộ thông báo và cập nhật token lên server theo ngôn ngữ mới
+    NotificationService.instance.rescheduleAllNotifications(isEnglish: code == 'en');
   }
 
   Future<void> toggleLanguage() async {

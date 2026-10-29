@@ -49,8 +49,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       try {
         final adService = Provider.of<AdService>(context, listen: false);
         await adService.initAdService();
-      } catch (e) {
-        debugPrint('Error initializing AdService: $e');
+      } catch (_) {
       }
     }
 
@@ -73,8 +72,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
       // Increment launch count for next launch
       await prefs.setInt('launch_count', launchCount + 1);
-    } catch (e) {
-      debugPrint('Error loading preferences: $e');
+    } catch (_) {
     }
   }
 
@@ -196,48 +194,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Top Title
-                  Column(
-                    children: [
-                      const SizedBox(height: 40),
-                      Text(
-                        'DEEPSEA',
-                        style: TextStyle(
-                          color: const Color(0xFF00F0FF),
-                          fontSize: 48,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 8,
-                          shadows: [
-                            Shadow(
-                              color: const Color(0xFF00F0FF).withValues(alpha: 0.5),
-                              blurRadius: 15,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF3366).withValues(alpha: 0.2),
-                          border: Border.all(
-                            color: const Color(0xFFFF3366).withValues(alpha: 0.5),
-                            width: 1,
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'THÁM HIỂM',
-                          style: TextStyle(
-                            color: Color(0xFFFF3366),
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 4,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Top Title removed (kept empty box to preserve layout)
+                  const SizedBox.shrink(),
 
                   // Bottom loading HUD
                   Column(

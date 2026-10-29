@@ -5,6 +5,8 @@ class SoundService extends ChangeNotifier {
   late final AudioPlayer _ambientPlayer;
   late final AudioPlayer _secondaryAmbientPlayer;
   late final AudioPlayer _creaturePlayer;
+  final List<AudioPlayer> _pageFlipPool = [];
+  int _pageFlipPoolIndex = 0;
 
   bool _isMuted = false;
   bool _isAmbientPlaying = false;
@@ -24,6 +26,15 @@ class SoundService extends ChangeNotifier {
     // Set ambient players to loop
     _ambientPlayer.setReleaseMode(ReleaseMode.loop);
     _secondaryAmbientPlayer.setReleaseMode(ReleaseMode.loop);
+
+    // Audio pool cho lật trang liên tục không bị ngắt
+    for (int i = 0; i < 3; i++) {
+      final p = AudioPlayer();
+      p.setReleaseMode(ReleaseMode.stop);
+      p.setPlayerMode(PlayerMode.lowLatency);
+      p.setVolume(0.85);
+      _pageFlipPool.add(p);
+    }
   }
 
   // Toggles the global mute state
@@ -59,10 +70,7 @@ class SoundService extends ChangeNotifier {
       await _ambientPlayer.stop();
       await _ambientPlayer.play(AssetSource('sounds/$soundFileName'));
       _isAmbientPlaying = true;
-    } catch (e) {
-      if (kDebugMode) {
-        print("Ambient audio playback failed (sound file 'assets/sounds/$soundFileName' might be missing): $e");
-      }
+    } catch (_) {
       _isAmbientPlaying = false;
     }
     notifyListeners();
@@ -74,10 +82,7 @@ class SoundService extends ChangeNotifier {
     _isAmbientPlaying = false;
     try {
       await _ambientPlayer.stop();
-    } catch (e) {
-      if (kDebugMode) {
-        print("Error stopping ambient: $e");
-      }
+    } catch (_) {
     }
     notifyListeners();
   }
@@ -98,10 +103,7 @@ class SoundService extends ChangeNotifier {
       await _secondaryAmbientPlayer.stop();
       await _secondaryAmbientPlayer.play(AssetSource('sounds/$soundFileName'));
       _isSecondaryAmbientPlaying = true;
-    } catch (e) {
-      if (kDebugMode) {
-        print("Secondary ambient audio playback failed (sound file 'assets/sounds/$soundFileName' might be missing): $e");
-      }
+    } catch (_) {
       _isSecondaryAmbientPlaying = false;
     }
     notifyListeners();
@@ -113,10 +115,7 @@ class SoundService extends ChangeNotifier {
     _isSecondaryAmbientPlaying = false;
     try {
       await _secondaryAmbientPlayer.stop();
-    } catch (e) {
-      if (kDebugMode) {
-        print("Error stopping secondary ambient: $e");
-      }
+    } catch (_) {
     }
     notifyListeners();
   }
@@ -134,20 +133,29 @@ class SoundService extends ChangeNotifier {
       } else {
         await _creaturePlayer.play(AssetSource('sounds/$soundFileName'));
       }
-    } catch (e) {
-      if (kDebugMode) {
-        print("Creature audio playback failed (sound file '$soundFileName' might be missing or unreachable): $e");
-      }
+    } catch (_) {
     }
   }
 
   Future<void> stopCreatureSound() async {
     try {
       await _creaturePlayer.stop();
-    } catch (e) {
-      if (kDebugMode) {
-        print("Error stopping creature sound: $e");
-      }
+    } catch (_) {
+    }
+  }
+
+  // Âm thanh lật trang sách cổ chân thực
+  Future<void> playPageFlipSound() async {
+    if (_isMuted || _pageFlipPool.isEmpty) return;
+    try {
+      final player = _pageFlipPool[_pageFlipPoolIndex];
+      _pageFlipPoolIndex = (_pageFlipPoolIndex + 1) % _pageFlipPool.length;
+      player.stop();
+      await player.play(
+        AssetSource('sounds/page_flip.mp3'),
+        mode: PlayerMode.lowLatency,
+      );
+    } catch (_) {
     }
   }
 
@@ -156,6 +164,11 @@ class SoundService extends ChangeNotifier {
     _ambientPlayer.dispose();
     _secondaryAmbientPlayer.dispose();
     _creaturePlayer.dispose();
+    for (final p in _pageFlipPool) {
+      p.stop();
+      p.dispose();
+    }
+    _pageFlipPool.clear();
     super.dispose();
   }
 }

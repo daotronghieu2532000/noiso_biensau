@@ -53,18 +53,36 @@ class _CachedCreatureVideoPlayerState extends State<CachedCreatureVideoPlayer> {
     _initializeVideo();
   }
 
+  @override
+  void didUpdateWidget(covariant CachedCreatureVideoPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _controller?.pause();
+      _controller?.dispose();
+      _controller = null;
+      _isInitialized = false;
+      _hasError = false;
+      _initializeVideo();
+    }
+  }
+
   Future<void> _initializeVideo() async {
     try {
-      // 1. Fetch file from cache manager with a cache-buster query parameter to force refresh updated files
-      final cacheBusterUrl = widget.videoUrl.contains('?')
-          ? '${widget.videoUrl}&cb=1.0.4_v1'
-          : '${widget.videoUrl}?cb=1.0.4_v1';
-      final fileInfo = await DefaultCacheManager().getSingleFile(cacheBusterUrl);
+      VideoPlayerController controller;
+      if (widget.videoUrl.startsWith('assets/')) {
+        controller = VideoPlayerController.asset(widget.videoUrl);
+      } else {
+        // 1. Fetch file from cache manager with a cache-buster query parameter to force refresh updated files
+        final cacheBusterUrl = widget.videoUrl.contains('?')
+            ? '${widget.videoUrl}&cb=1.0.4_v1'
+            : '${widget.videoUrl}?cb=1.0.4_v1';
+        final fileInfo = await DefaultCacheManager().getSingleFile(cacheBusterUrl);
+        controller = VideoPlayerController.file(fileInfo);
+      }
       
       if (!mounted) return;
       
-      // 2. Initialize controller from local cached file
-      final controller = VideoPlayerController.file(fileInfo);
+      // 2. Initialize controller
       await controller.initialize();
       await controller.setLooping(true);
       await controller.setVolume(0); // Mute sound in the list

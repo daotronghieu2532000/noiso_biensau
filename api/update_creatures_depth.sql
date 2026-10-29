@@ -1,0 +1,25 @@
+-- Cập nhật độ sâu cho 24 sinh vật biển sâu (Khắc phục lỗi trùng lặp độ sâu 0m)
+UPDATE `creatures` SET `min_depth` = 0, `max_depth` = 50 WHERE `id` = 'clownfish';
+UPDATE `creatures` SET `min_depth` = 15, `max_depth` = 500 WHERE `id` = 'humpback_whale';
+UPDATE `creatures` SET `min_depth` = 35, `max_depth` = 1200 WHERE `id` = 'great_white_shark';
+UPDATE `creatures` SET `min_depth` = 60, `max_depth` = 1000 WHERE `id` = 'orca';
+UPDATE `creatures` SET `min_depth` = 100, `max_depth` = 500 WHERE `id` = 'blue_whale';
+UPDATE `creatures` SET `min_depth` = 150, `max_depth` = 1500 WHERE `id` = 'megalodon';
+UPDATE `creatures` SET `min_depth` = 200, `max_depth` = 1200 WHERE `id` = 'lagiacrus';
+UPDATE `creatures` SET `min_depth` = 300, `max_depth` = 2140 WHERE `id` = 'giant_isopod';
+UPDATE `creatures` SET `min_depth` = 450, `max_depth` = 1000 WHERE `id` = 'oarfish';
+UPDATE `creatures` SET `min_depth` = 600, `max_depth` = 1500 WHERE `id` = 'reaper_leviathan';
+UPDATE `creatures` SET `min_depth` = 750, `max_depth` = 3000 WHERE `id` = 'sperm_whale';
+UPDATE `creatures` SET `min_depth` = 900, `max_depth` = 1500 WHERE `id` = 'giant_squid';
+UPDATE `creatures` SET `min_depth` = 1000, `max_depth` = 1800 WHERE `id` = 'vampire_squid';
+UPDATE `creatures` SET `min_depth` = 1400, `max_depth` = 4000 WHERE `id` = 'anglerfish';
+UPDATE `creatures` SET `min_depth` = 1800, `max_depth` = 3000 WHERE `id` = 'black_dragonfish';
+UPDATE `creatures` SET `min_depth` = 2200, `max_depth` = 3200 WHERE `id` = 'greenland_shark';
+UPDATE `creatures` SET `min_depth` = 2800, `max_depth` = 8000 WHERE `id` = 'ghost_leviathan';
+UPDATE `creatures` SET `min_depth` = 3500, `max_depth` = 6000 WHERE `id` = 'kraken';
+UPDATE `creatures` SET `min_depth` = 4200, `max_depth` = 9000 WHERE `id` = 'godzilla';
+UPDATE `creatures` SET `min_depth` = 5000, `max_depth` = 8000 WHERE `id` = 'sea_serpent';
+UPDATE `creatures` SET `min_depth` = 5800, `max_depth` = 9000 WHERE `id` = 'the_bloop';
+UPDATE `creatures` SET `min_depth` = 7000, `max_depth` = 10500 WHERE `id` = 'jormungandr';
+UPDATE `creatures` SET `min_depth` = 9000, `max_depth` = 11000 WHERE `id` = 'leviathan';
+UPDATE `creatures` SET `min_depth` = 11000, `max_depth` = 11000 WHERE `id` = 'cthulhu';

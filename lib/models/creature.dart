@@ -42,6 +42,48 @@ class Creature {
     this.isLocked = false,
   });
 
+  Creature copyWith({
+    String? id,
+    String? name,
+    String? nameEn,
+    String? scientificName,
+    String? type,
+    int? minDepth,
+    int? maxDepth,
+    int? dangerLevel,
+    String? sizeHumanRatio,
+    String? sizeHumanRatioEn,
+    double? humanSizeMeters,
+    double? creatureSizeMeters,
+    String? imageUrl,
+    String? videoUrl,
+    String? ambientSound,
+    String? description,
+    String? descriptionEn,
+    bool? isLocked,
+  }) {
+    return Creature(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      nameEn: nameEn ?? this.nameEn,
+      scientificName: scientificName ?? this.scientificName,
+      type: type ?? this.type,
+      minDepth: minDepth ?? this.minDepth,
+      maxDepth: maxDepth ?? this.maxDepth,
+      dangerLevel: dangerLevel ?? this.dangerLevel,
+      sizeHumanRatio: sizeHumanRatio ?? this.sizeHumanRatio,
+      sizeHumanRatioEn: sizeHumanRatioEn ?? this.sizeHumanRatioEn,
+      humanSizeMeters: humanSizeMeters ?? this.humanSizeMeters,
+      creatureSizeMeters: creatureSizeMeters ?? this.creatureSizeMeters,
+      imageUrl: imageUrl ?? this.imageUrl,
+      videoUrl: videoUrl ?? this.videoUrl,
+      ambientSound: ambientSound ?? this.ambientSound,
+      description: description ?? this.description,
+      descriptionEn: descriptionEn ?? this.descriptionEn,
+      isLocked: isLocked ?? this.isLocked,
+    );
+  }
+
   String getName(String langCode) => langCode == 'en' ? nameEn : name;
   String getSizeHumanRatio(String langCode) => langCode == 'en' ? sizeHumanRatioEn : sizeHumanRatio;
   String getDescription(String langCode) => langCode == 'en' ? descriptionEn : description;

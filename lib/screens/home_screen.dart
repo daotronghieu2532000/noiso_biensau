@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
@@ -14,6 +15,7 @@ import 'dashboard_screen.dart';
 import 'settings_screen.dart';
 import 'battle_screen.dart';
 import 'video_screen.dart';
+import 'story_list_screen.dart';
 import '../widgets/cached_video_player.dart';
 import '../widgets/rating_dialog.dart';
 
@@ -43,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _crackSpawnCooldown = 0;
   final math.Random _random = math.Random();
   bool _isActive = true;
+  int _lastTickMs = 0;
   String _videoIcon = 'assets/images/icon/dra00.png';
   final List<String> _lavaIcons = const [
     'assets/images/icon/dra00.png',
@@ -269,7 +272,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _updateParticles() {
-    if (!mounted) return;
+    if (!mounted || !_isActive) return;
+
+    // Giới hạn tần số tính toán vật lý và vẽ hiệu ứng ở mức tối ưu (~50 FPS)
+    // Giúp máy luôn mát, mượt mà trên cả màn hình 120Hz ProMotion mà không tốn GPU/CPU thừa
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastTickMs < 20) return;
+    _lastTickMs = now;
+
     final size = MediaQuery.of(context).size;
     
     // Sinking factor: tốc độ bọt khí thay đổi nhẹ khi cuộn
@@ -336,21 +346,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         }
       }
 
-      // 3. Cập nhật sứa phát quang (Trôi chậm, co bóp và uốn lượn ngang sinh động)
-      for (var jelly in _jellyfishes) {
-        jelly.y -= jelly.speedY;
-        // Tạo chuyển động bơi lượn tự do qua lại bằng sóng Sin
-        jelly.x += jelly.speedX + math.sin(jelly.y / 50.0 + jelly.pulseOffset) * 0.25;
-        
-        // Giới hạn màn hình và tái tạo sứa
-        if (jelly.y < -50) {
-          jelly.y = size.height + 50;
-          jelly.x = _random.nextDouble() * size.width;
-        }
-        if (jelly.x < -50) {
-          jelly.x = size.width + 50;
-        } else if (jelly.x > size.width + 50) {
-          jelly.x = -50;
+      // 3. Cập nhật sứa phát quang (Chỉ tính toán khi ở độ sâu > 700m vì sứa chỉ xuất hiện từ 800m)
+      if (_currentDepth > 700) {
+        for (var jelly in _jellyfishes) {
+          jelly.y -= jelly.speedY;
+          // Tạo chuyển động bơi lượn tự do qua lại bằng sóng Sin
+          jelly.x += jelly.speedX + math.sin(jelly.y / 50.0 + jelly.pulseOffset) * 0.25;
+          
+          // Giới hạn màn hình và tái tạo sứa
+          if (jelly.y < -50) {
+            jelly.y = size.height + 50;
+            jelly.x = _random.nextDouble() * size.width;
+          }
+          if (jelly.x < -50) {
+            jelly.x = size.width + 50;
+          } else if (jelly.x > size.width + 50) {
+            jelly.x = -50;
+          }
         }
       }
 
@@ -387,29 +399,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         current.phase += current.speed * 0.015;
       }
 
-      // Cập nhật chim bay trên trời
-      for (var bird in _flyingBirds) {
-        if (bird.isMovingRight) {
-          bird.x += bird.speedX;
-          if (bird.x > size.width + 250) {
-            bird.x = -250;
-            if (bird.flockId == -1) {
-              bird.y = 60.0 + _random.nextDouble() * 140.0;
+      // Cập nhật chim bay trên trời (Chỉ tính khi ở gần mặt nước < 400m)
+      if (_currentDepth < 400) {
+        for (var bird in _flyingBirds) {
+          if (bird.isMovingRight) {
+            bird.x += bird.speedX;
+            if (bird.x > size.width + 250) {
+              bird.x = -250;
+              if (bird.flockId == -1) {
+                bird.y = 60.0 + _random.nextDouble() * 140.0;
+              }
+            }
+          } else {
+            bird.x -= bird.speedX;
+            if (bird.x < -250) {
+              bird.x = size.width + 250;
+              if (bird.flockId == -1) {
+                bird.y = 60.0 + _random.nextDouble() * 140.0;
+              }
             }
           }
-        } else {
-          bird.x -= bird.speedX;
-          if (bird.x < -250) {
-            bird.x = size.width + 250;
-            if (bird.flockId == -1) {
-              bird.y = 60.0 + _random.nextDouble() * 140.0;
-            }
-          }
+          
+          // Vỗ cánh và nhấp nhô
+          bird.wingFlapPhase += bird.wingFlapSpeed * 0.02;
+          bird.y += math.sin(_particleController.value * 2 * math.pi + bird.wingFlapPhase) * 0.15;
         }
-        
-        // Vỗ cánh và nhấp nhô
-        bird.wingFlapPhase += bird.wingFlapSpeed * 0.02;
-        bird.y += math.sin(_particleController.value * 2 * math.pi + bird.wingFlapPhase) * 0.15;
       }
 
       // 4. Cập nhật Thủy quái Leviathan khổng lồ ẩn hiện
@@ -528,6 +542,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       _isActive = false;
     });
+    if (_particleController.isAnimating) {
+      _particleController.stop();
+    }
 
     // Pause ambient sounds
     await soundService.stopAmbient();
@@ -546,6 +563,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       setState(() {
         _isActive = true;
       });
+      if (!_particleController.isAnimating) {
+        _particleController.repeat();
+      }
       _onScroll(); 
     }
     return result;
@@ -1232,6 +1252,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ),
 
+          // 4f. Floating HUD: Sailor Stories Button - Chuyện Thủy Thủ (Scale 1.35 - Icon 44x44)
+          Positioned(
+            right: 8.0,
+            top: MediaQuery.of(context).padding.top + 345.0,
+            child: _BalloonHUDButton(
+              animation: _particleController,
+              phaseOffset: 7.5,
+              gradientColors: const [Color(0xFFFFB300), Color(0xFFFF6F00)],
+              borderColor: const Color(0xFFFFD54F),
+              onTap: () => _navigateTo(const StoryListScreen()),
+              scale: 1.35,
+              child: Image.asset(
+                'assets/images/icon/pirate-hat.png',
+                width: 44,
+                height: 44,
+              ),
+            ),
+          ),
+
           // 5. Floating HUD: Diver Overlay (sinks with scroll depth)
           _buildDiverOverlay(context),
         ],
@@ -1395,81 +1434,198 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildMediaTabSelector() {
     final strings = AppStrings.of(context);
-    final themeColor = const Color(0xFF00F0FF);
     
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
       child: Container(
-        height: 48,
+        height: 52,
         decoration: BoxDecoration(
-          color: const Color(0xFF030D1C).withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF030D1E).withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(26),
           border: Border.all(
-            color: themeColor.withValues(alpha: 0.2),
-            width: 1.0,
+            color: const Color(0xFF00F0FF).withValues(alpha: 0.22),
+            width: 1.2,
           ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _activeMediaTab = 0;
-                  });
-                  Provider.of<SoundService>(context, listen: false).playCreatureSound("sonar_echo.mp3");
-                },
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _activeMediaTab == 0
-                        ? themeColor.withValues(alpha: 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Text(
-                    strings.languageCode == 'en' ? 'SCAN IMAGES' : 'HÌNH ẢNH',
-                    style: TextStyle(
-                      color: _activeMediaTab == 0 ? Colors.white : Colors.white30,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
             ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _activeMediaTab = 1;
-                  });
-                  Provider.of<SoundService>(context, listen: false).playCreatureSound("sonar_echo.mp3");
-                },
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _activeMediaTab == 1
-                        ? themeColor.withValues(alpha: 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Text(
-                    strings.languageCode == 'en' ? 'LIVE TELEMETRY' : 'HÌNH ĐỘNG (VIDEO)',
-                    style: TextStyle(
-                      color: _activeMediaTab == 1 ? Colors.white : Colors.white30,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ),
+            BoxShadow(
+              color: const Color(0xFF00F0FF).withValues(alpha: 0.08),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
+        ),
+        padding: const EdgeInsets.all(4.0),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double tabWidth = constraints.maxWidth / 2;
+            return Stack(
+              children: [
+                // 1. Thanh trượt phát quang chuyển động mượt mà phong cách CapCut / iOS Glass
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.fastOutSlowIn,
+                  left: _activeMediaTab * tabWidth,
+                  top: 0,
+                  bottom: 0,
+                  width: tabWidth,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFF00558F),
+                          Color(0xFF0088CC),
+                          Color(0xFF00E5FF),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00F0FF).withValues(alpha: 0.42),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                          offset: const Offset(0, 2),
+                        ),
+                        BoxShadow(
+                          color: const Color(0xFF0072FF).withValues(alpha: 0.28),
+                          blurRadius: 6,
+                        ),
+                      ],
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        width: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 2. Các nút tab chức năng
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMediaTabItem(
+                        index: 0,
+                        title: strings.languageCode == 'en' ? 'SCAN IMAGES' : 'HÌNH ẢNH',
+                        icon: Icons.image_rounded,
+                        isSelected: _activeMediaTab == 0,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildMediaTabItem(
+                        index: 1,
+                        title: strings.languageCode == 'en' ? 'LIVE TELEMETRY' : 'HÌNH ĐỘNG (VIDEO)',
+                        icon: Icons.play_circle_fill_rounded,
+                        isSelected: _activeMediaTab == 1,
+                        isLive: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaTabItem({
+    required int index,
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    bool isLive = false,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (_activeMediaTab != index) {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _activeMediaTab = index;
+          });
+          Provider.of<SoundService>(context, listen: false)
+              .playCreatureSound("sonar_echo.mp3");
+        }
+      },
+      child: Center(
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutBack,
+          scale: isSelected ? 1.02 : 0.96,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isLive) ...[
+                // Chấm đỏ LIVE phát sáng nhấp nháy tinh tế
+                Container(
+                  width: 7,
+                  height: 7,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isSelected
+                        ? const Color(0xFFFF2A6D)
+                        : const Color(0xFFFF2A6D).withValues(alpha: 0.45),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFFF2A6D).withValues(alpha: 0.8),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                ),
+              ],
+              Icon(
+                icon,
+                size: 15,
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.42),
+              ),
+              const SizedBox(width: 6),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 250),
+                style: TextStyle(
+                  color: isSelected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.45),
+                  fontSize: 11.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  letterSpacing: 1.1,
+                  fontFamily: 'monospace',
+                  shadows: isSelected
+                      ? [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                          Shadow(
+                            color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
+                            blurRadius: 8,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1477,7 +1633,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildCreatureItem(Creature creature) {
     final dataService = Provider.of<DataService>(context, listen: false);
-    final strings = AppStrings.of(context);
     final index = dataService.creatures.indexOf(creature);
     final screenWidth = MediaQuery.of(context).size.width;
     final themeColor = creature.isLocked ? const Color(0xFFFF3366) : const Color(0xFF00F0FF);
@@ -1539,48 +1694,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           Positioned(
             left: 56.0,
             top: 26.0,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "${creature.minDepth}m",
-                  style: TextStyle(
-                    color: themeColor,
-                    fontSize: 15.0,
-                    fontWeight: FontWeight.w900,
-                    fontFamily: 'monospace',
-                    letterSpacing: 0.5,
-                    shadows: [
-                      Shadow(
-                        color: themeColor.withValues(alpha: 0.6),
-                        blurRadius: 10,
-                      )
-                    ],
-                  ),
-                ),
-                Text(
-                  "⬇ ${creature.maxDepth}m",
-                  style: TextStyle(
-                    color: themeColor.withValues(alpha: 0.75),
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'monospace',
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  creature.isLocked 
-                      ? (strings.languageCode == 'vi' ? "TÍN HIỆU LẠ" : "STRANGE SIGNAL") 
-                      : (strings.languageCode == 'vi' ? "PHẠM VI SỐNG" : "HABITAT RANGE"),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    fontSize: 8.0,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ],
+            child: Text(
+              "${creature.minDepth}m",
+              style: TextStyle(
+                color: themeColor,
+                fontSize: 15.0,
+                fontWeight: FontWeight.w900,
+                fontFamily: 'monospace',
+                letterSpacing: 0.5,
+                shadows: [
+                  Shadow(
+                    color: themeColor.withValues(alpha: 0.6),
+                    blurRadius: 10,
+                  )
+                ],
+              ),
             ),
           ),
           
@@ -1614,19 +1742,56 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 ),
                               ),
                             )
-                          : (_activeMediaTab == 1 && creature.videoUrl.isNotEmpty)
-                              ? CachedCreatureVideoPlayer(
-                                  videoUrl: creature.videoUrl,
-                                  useTightMask: true,
-                                  placeholder: creature.buildImage(
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
+                          : AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 420),
+                              reverseDuration: const Duration(milliseconds: 360),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
+                                return Stack(
+                                  alignment: Alignment.center,
+                                  children: <Widget>[
+                                    ...previousChildren,
+                                    ?currentChild,
+                                  ],
+                                );
+                              },
+                              transitionBuilder: (Widget child, Animation<double> animation) {
+                                final fade = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                final scale = Tween<double>(begin: 0.94, end: 1.0).animate(
+                                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                                );
+                                return FadeTransition(
+                                  opacity: fade,
+                                  child: ScaleTransition(
+                                    scale: scale,
+                                    child: child,
                                   ),
-                                )
-                              : creature.buildImage(
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
-                                ),
+                                );
+                              },
+                              child: (_activeMediaTab == 1 && creature.videoUrl.isNotEmpty)
+                                  ? KeyedSubtree(
+                                      key: ValueKey('creature_video_${creature.id}'),
+                                      child: CachedCreatureVideoPlayer(
+                                        videoUrl: creature.videoUrl,
+                                        useTightMask: true,
+                                        placeholder: creature.buildImage(
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
+                                        ),
+                                      ),
+                                    )
+                                  : KeyedSubtree(
+                                      key: ValueKey('creature_image_${creature.id}'),
+                                      child: creature.buildImage(
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (context, error, stackTrace) => _buildErrorImage(screenWidth),
+                                      ),
+                                    ),
+                            ),
                     ),
                   ),
                 ),
@@ -1872,6 +2037,13 @@ class _UnderwaterEffectsPainter extends CustomPainter {
       // Độ hiển thị tăng dần từ 800m đến 1500m
       final double visibility = ((depth - 800) / 700).clamp(0.0, 1.0);
       
+      final Paint glowOuter = Paint()..style = PaintingStyle.fill;
+      final Paint glowInner = Paint()..style = PaintingStyle.fill;
+      final Paint linePaint = Paint()
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      final Paint fillPaint = Paint()..style = PaintingStyle.fill;
+
       for (var jelly in jellyfishes) {
         if (jelly.y >= waterSurfaceY) {
           // Nhịp co bóp của sứa dựa trên sin
@@ -1881,26 +2053,15 @@ class _UnderwaterEffectsPainter extends CustomPainter {
           final double currentSize = jelly.size * scale;
           final double halfWidth = currentSize / 2;
           
-          // Paint cho quầng sáng xung quanh sứa (Glow)
-          final Paint glowPaint = Paint()
-            ..color = jelly.glowColor.withValues(alpha: 0.12 * visibility)
-            ..style = PaintingStyle.fill
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
-            
-          // Paint vẽ viền sắc nét phát sáng
-          final Paint linePaint = Paint()
-            ..color = jelly.glowColor.withValues(alpha: 0.65 * visibility)
-            ..strokeWidth = 1.5
-            ..style = PaintingStyle.stroke
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1);
-            
-          // Paint vẽ thân trong suốt
-          final Paint fillPaint = Paint()
-            ..color = jelly.glowColor.withValues(alpha: 0.3 * visibility)
-            ..style = PaintingStyle.fill;
+          // Quầng sáng phát quang 2 tầng (nhẹ hơn 70% so với blur, không tốn GPU shader sampler)
+          glowOuter.color = jelly.glowColor.withValues(alpha: 0.08 * visibility);
+          glowInner.color = jelly.glowColor.withValues(alpha: 0.18 * visibility);
+          linePaint.color = jelly.glowColor.withValues(alpha: 0.65 * visibility);
+          fillPaint.color = jelly.glowColor.withValues(alpha: 0.3 * visibility);
 
-          // Vẽ quầng sáng nền
-          canvas.drawCircle(Offset(jelly.x, jelly.y), currentSize * 1.6, glowPaint);
+          // Vẽ quầng sáng nền 2 tầng
+          canvas.drawCircle(Offset(jelly.x, jelly.y), currentSize * 1.6, glowOuter);
+          canvas.drawCircle(Offset(jelly.x, jelly.y), currentSize * 1.1, glowInner);
           
           // Vẽ mũ sứa (Bell/Cap)
           final Path bellPath = Path();
@@ -2002,8 +2163,7 @@ class _UnderwaterEffectsPainter extends CustomPainter {
         final Paint glowPaint = Paint()
           ..shader = shaderGlow
           ..style = PaintingStyle.stroke
-          ..strokeWidth = current.thickness * 3.5
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+          ..strokeWidth = current.thickness * 2.5;
 
         final Path path = Path();
         
@@ -2053,11 +2213,6 @@ class _UnderwaterEffectsPainter extends CustomPainter {
       ..color = fish.color.withValues(alpha: fish.opacity * visibility)
       ..style = PaintingStyle.fill;
 
-    final Paint glowPaint = Paint()
-      ..color = fish.color.withValues(alpha: fish.opacity * 0.15 * visibility)
-      ..style = PaintingStyle.fill
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-
     final Path path = Path();
     
     if (fish.isMovingRight) {
@@ -2094,7 +2249,6 @@ class _UnderwaterEffectsPainter extends CustomPainter {
     
     path.close();
     
-    canvas.drawPath(path, glowPaint);
     canvas.drawPath(path, paint);
   }
 
@@ -2282,10 +2436,11 @@ class _FloatingCreatureState extends State<FloatingCreature> with SingleTickerPr
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _animation,
+      child: widget.child,
       builder: (context, child) {
         return Transform.translate(
           offset: Offset(0.0, _animation.value),
-          child: widget.child,
+          child: child,
         );
       },
     );
@@ -2340,7 +2495,7 @@ class WavePainter extends CustomPainter {
     final path = Path();
     path.moveTo(0, size.height);
 
-    for (double x = 0; x <= size.width; x += 4) {
+    for (double x = 0; x <= size.width; x += 8) {
       double relativeX = x / size.width;
       double y = waveAmplitude * math.sin((relativeX * waveFrequency * 2 * math.pi) + wavePhase);
       path.lineTo(x, y + size.height * 0.3);
@@ -2492,8 +2647,11 @@ class _SeaweedPainter extends CustomPainter {
 
     double depthProgress = ((scrollOffset - 550.0) / 10000.0).clamp(0.0, 1.0);
 
-    // Render 18 overlapping plants on the left, and 18 on the right
-    final int plantCount = 18;
+    // Render 12 overlapping plants on the left, and 12 on the right
+    final int plantCount = 12;
+
+    final Paint glowPaint = Paint()..style = PaintingStyle.fill;
+    final Paint plantPaint = Paint()..style = PaintingStyle.fill;
 
     for (int i = 0; i < plantCount; i++) {
       double yRatio = 0.08 + (i / (plantCount - 1)) * 0.84;
@@ -2504,14 +2662,24 @@ class _SeaweedPainter extends CustomPainter {
       int rightType = (i + 2) % 4;
 
       // Draw left plant
-      _drawPlant(canvas, 0, y, leftType, depthProgress, true, i);
+      _drawPlant(canvas, 0, y, leftType, depthProgress, true, i, glowPaint, plantPaint);
 
       // Draw right plant
-      _drawPlant(canvas, screenWidth, y, rightType, depthProgress, false, i + plantCount);
+      _drawPlant(canvas, screenWidth, y, rightType, depthProgress, false, i + plantCount, glowPaint, plantPaint);
     }
   }
 
-  void _drawPlant(Canvas canvas, double startX, double y, int type, double depthProgress, bool isLeft, int index) {
+  void _drawPlant(
+    Canvas canvas, 
+    double startX, 
+    double y, 
+    int type, 
+    double depthProgress, 
+    bool isLeft, 
+    int index,
+    Paint glowPaint,
+    Paint plantPaint,
+  ) {
     // Sway calculation
     double phase = index * 0.9;
     double size = 7.0 + (index % 3) * 2.0; // variable size: 7 to 11 (nhỏ gọn tinh tế)
@@ -2570,22 +2738,17 @@ class _SeaweedPainter extends CustomPainter {
       }
     }
 
-    // Draw ambient glow behind the plant if in deep abyss (using a simple blurred circle)
+    // Draw ambient glow behind the plant if in deep abyss (nhẹ nhàng, không tốn tính toán blur)
     if (hasGlow) {
-      final Paint glowPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = detailColor.withValues(alpha: 0.15)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-      
-      // Draw a soft glowing sphere centered at the base of the plant
       double glowX = isLeft ? startX + size * 0.4 : startX - size * 0.4;
+      glowPaint.color = detailColor.withValues(alpha: 0.15);
       canvas.drawCircle(Offset(glowX, y), size * 1.2, glowPaint);
     }
 
-    final Paint paint = Paint()..style = PaintingStyle.fill..color = baseColor;
+    plantPaint.color = baseColor;
     
     // Draw plant geometry (ONLY ONCE!)
-    _paintPlantGeometry(canvas, startX, y, type, size, sway, isLeft, paint, isGlowLayer: false);
+    _paintPlantGeometry(canvas, startX, y, type, size, sway, isLeft, plantPaint, isGlowLayer: false);
   }
 
   void _paintPlantGeometry(
@@ -3179,6 +3342,7 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
   double _videoOpacity = 0.0;
   bool _isForwardError = false;
   bool _isReverseError = false;
+  bool _videosInitialized = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -3186,12 +3350,17 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
   @override
   void initState() {
     super.initState();
-    _initVideos();
+    if (widget.depth >= 8000) {
+      _initVideos();
+    }
   }
 
   @override
   void didUpdateWidget(covariant _MarianaTrenchZone oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!_videosInitialized && widget.depth >= 8000) {
+      _initVideos();
+    }
     if (widget.depth != oldWidget.depth) {
       _handleDepthChange();
     }
@@ -3220,6 +3389,8 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
   }
 
   Future<void> _initVideos() async {
+    if (_videosInitialized) return;
+    _videosInitialized = true;
     // 1. Khởi tạo video chạy xuôi
     try {
       _forwardController = VideoPlayerController.asset('assets/images/creatures/dark.mp4');
@@ -3237,8 +3408,7 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
           _videoOpacity = 0.18;
         });
       }
-    } catch (e) {
-      debugPrint("Lỗi khởi tạo video xuôi: $e");
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isForwardError = true;
@@ -3255,8 +3425,7 @@ class _MarianaTrenchZoneState extends State<_MarianaTrenchZone> with AutomaticKe
         await _reverseController!.setVolume(1.0);
         _reverseController!.addListener(_reverseListener);
       }
-    } catch (e) {
-      debugPrint("Lỗi khởi tạo video ngược: $e");
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isReverseError = true;

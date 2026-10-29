@@ -1,51 +1,11 @@
 [
   {
-    "title": "Hành Trình Băng Giá: Nơi Tận Cùng Thế Giới",
-    "title_en": "Frozen Voyage: The End of the World",
-    "description": "Thước phim từ trên boong tàu thám hiểm lịch sử, băng qua những rặng băng tuyết vĩnh cửu tại đại dương cô lập nhất thế giới.",
-    "description_en": "Footage from the deck of a historic tall ship, navigating through endless ice walls in the planet's most remote and frozen ocean.",
-    "video_url": "https://codego.io.vn/api/uploads/videos/Above%20the%20Deck...%20Into%20the%20Frozen%20End%20of%20the%20World%20%20Towering%20masts...%20Endless%20ice...%20And%20one%20of%20the%20planet's%20most%20remote%20oceans%20stretching%20to%20the%20horizon.%20This%20image%20appears%20to%20show%20the%20--mast%20of%20the%20historic%20tall%20.mp4",
-    "thumbnail_url": "assets/images/creatures/ocean_arctic.png"
-  },
-  {
-    "title": "Sinh Vật Lạ Dưới Đáy Ấn Độ Dương",
-    "title_en": "Strange Abyssal Creature in Indian Ocean",
-    "description": "Các nhà khoa học kinh ngạc trước thước phim ghi lại một thực thể sống kỳ dị chưa từng được biết đến ở vùng sâu thẳm Ấn Độ Dương.",
-    "description_en": "Scientists were shocked to capture footage of an unidentified strange creature during an expedition in the remote Indian Ocean depths.",
-    "video_url": "https://codego.io.vn/api/uploads/videos/Cient%C3%ADficos%20quedaron%20impactados%20al%20registrar%20esta%20extra%C3%B1a%20criatura%20en%20las%20profundidades%20del%20oc%C3%A9ano.%20Una%20recente%20expedici%C3%B3n%20cient%C3%ADfica%20realizada%20por%20investigadores%20de%20Australia%20en%20una%20zona%20remota%20del%20Oc%C3%A9ano%20%C3%8Dndico%20.mp4",
-    "thumbnail_url": "assets/images/creatures/anglerfish.png"
-  },
-  {
     "title": "Nỗi Sợ Tột Cùng: Kraken Khởi Nguyên",
     "title_en": "Deepest Fears: The Genesis of Kraken",
     "description": "Một thước phim khoa học viễn tưởng ngắn miêu tả nỗi ám ảnh kinh hoàng nhất của nhân loại từ đáy vực sâu.",
     "description_en": "A sci-fi cinematic depiction showcasing humanity's deepest fears lurking within the dark abyss.",
     "video_url": "https://codego.io.vn/api/uploads/videos/Enjoy%20your%20deepest%20fears%E2%80%A6%20%23ai%20%23deepocean%20%23scifi%23kraken%23films.mp4",
-    "thumbnail_url": "assets/images/creatures/kraken.png"
-  },
-  {
-    "title": "Quái Thú Miocene: Siêu Cá Voi Livyatan",
-    "title_en": "Miocene Leviathan: Livyatan Melvillei",
-    "description": "Tìm hiểu về loài cá voi săn mồi khổng lồ thời tiền sử từng thống trị đại dương, đối thủ truyền kiếp của Megalodon.",
-    "description_en": "Explore the history of Livyatan melvillei, the massive predatory whale and apex prehistoric rival of Megalodon.",
-    "video_url": "https://codego.io.vn/api/uploads/videos/Livyatan%20%20The%20Giant%20Killer%20Whale%20of%20the%20Miocene%20%20Livyatan%20melvillei%20was%20a%20massive%20predatory%20whale%20that%20lived%20about%201213%20million%20years%20ago%20in%20the%20Miocene%20seas%20off%20Peru.%20It%20was%20one%20of%20the%20top%20ocean%20predators%20of%20its%20t.mp4",
-    "thumbnail_url": "assets/images/creatures/bg_shark.jpeg"
-  },
-  {
-    "title": "Hải Long vs Bạch Tuộc Khổng Lồ",
-    "title_en": "Sea Dragon vs Giant Octopus",
-    "description": "Thước phim gây sốc quay từ trực thăng cận cảnh cuộc chiến sinh tử giữa một sinh vật giống rồng biển và bạch tuộc khổng lồ.",
-    "description_en": "Shocking footage captured from a helicopter of an epic battle between a sea dragon-like beast and a giant octopus.",
-    "video_url": "https://codego.io.vn/api/uploads/videos/Lo%20que%20vimos%20desde%20el%20helic%C3%B3ptero%20nos%20dej%C3%B3%20sin%20alienti!%20%20Una%20criatura%20extra%C3%B1a%20tipo%20drag%C3%B3n%20marino%20luchando%20contra%20un%20pulpo%20gigante%20en%20el%20Pac%C3%ADfico.%20Inolvidable!%20%20%23Misterio%20%23Terror%20%23Mar%20%23impactante%20-------------------.mp4",
-    "thumbnail_url": "assets/images/creatures/leviathan.png"
-  },
-  {
-    "title": "Sự Trỗi Dậy Của Kraken: Cơn Thịnh Nộ",
-    "title_en": "Rise of the Kraken: The Fury",
-    "description": "Kỹ xảo điện ảnh đỉnh cao tái hiện khoảnh khắc quái thú xúc tu khổng lồ thức tỉnh phá hủy hạm đội tàu bè.",
-    "description_en": "High-end VFX cinematic showing the legendary multi-tentacled sea monster awakening to crush fleets.",
-    "video_url": "https://codego.io.vn/api/uploads/videos/Rise%20of%20The%20Kraken%20%23creative%20%23vfx%20%23movie%20%23kraken%23monster.mp4",
-    "thumbnail_url": "assets/images/creatures/bg_kraken.jpeg"
+    "thumbnail_url": "assets/images/creatures/Kraken_attacking_research.png"
   },
   {
     "title": "Kraken Trỗi Dậy 2027: Teaser Khởi Động",
@@ -53,15 +13,7 @@
     "description": "Đoạn phim giới thiệu điện ảnh đặc biệt, hứa hẹn mở ra kỷ nguyên thức tỉnh đầy kinh hoàng của thủy quái Kraken.",
     "description_en": "Special teaser trailer illustrating the upcoming terrifying cinematic return of the Kraken in 2027.",
     "video_url": "https://codego.io.vn/api/uploads/videos/Rise%20of%20The%20Kraken%2C%20Coming%202027.%20%23creative%20%23vfx%20%23movie%20%23monster%20%23kraken.mp4",
-    "thumbnail_url": "assets/images/creatures/bg_dark_abyss.jpeg"
-  },
-  {
-    "title": "Hồ Sơ Cthulhu: Tà Thần Vực Thẳm",
-    "title_en": "Cthulhu Dossier: The Cosmic Threat",
-    "description": "Giai thoại đầy kinh hoàng và chân thực về sự trỗi dậy của Tà Thần Cthulhu từ thành phố chìm sâu R'lyeh.",
-    "description_en": "The chilling and disturbing legend of the great cosmic entity Cthulhu awakening from the sunken city of R'lyeh.",
-    "video_url": "https://codego.io.vn/api/uploads/videos/S%C3%AD%2C%20conozco%20la%20historia%20de%20Cthulhu%2C%20una%20de%20las%20criaturas%20m%C3%A1s%20ic%C3%B3nicas%20creadas%20por%20el%20escritor%20H.%20P.%20Lovecraft.%20Aqu%C3%AD%20te%20la%20cuento%20de%20forma%20clara%20v%C3%A0%20perturbadora%2C%20como%20suele%20gustar%20en%20tus%20contenidos-%20%20Qui%C3%A9n%20es%20Cthulhu.mp4",
-    "thumbnail_url": "assets/images/creatures/Cthulhu.png"
+    "thumbnail_url": "assets/images/creatures/Kraken_awakening.png"
   },
   {
     "title": "Phác Họa Kraken: Quy Trình AI",
@@ -69,6 +21,102 @@
     "description": "Thước phim phác thảo nghệ thuật về cấu trúc sinh học và chuyển động thực tế của thủy quái Kraken bằng trí tuệ nhân tạo.",
     "description_en": "An artistic workflow visualization detailing the biological structure and motion of the Kraken using advanced AI.",
     "video_url": "https://codego.io.vn/api/uploads/videos/V%C3%ADdeo%20Kraken%20100_%20IA%20Workflow%20de%20Nano%20b.mp4",
-    "thumbnail_url": "assets/images/creatures/bg_bermuda.jpeg"
+    "thumbnail_url": "assets/images/creatures/kraken_ai.png"
+  },
+  {
+    "title": "Cú Đớp Tử Thần: Cá Mập Trắng Phục Kích Mồi",
+    "title_en": "Death Breach: Great White Shark Ambush",
+    "description": "Thước phim quay chậm nghẹt thở từ lòng đại dương xé toạc mặt nước để đoạt mạng con mồi của sát thủ biển cả.",
+    "description_en": "Breathtaking high-speed footage of an apex great white launching from the abyss to strike prey at the surface.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/great_white_breach.mp4",
+    "thumbnail_url": "assets/images/creatures/great_white_breach.png"
+  },
+  {
+    "title": "Bản Năng Sát Thủ: Đấu Trường Sinh Tử Vực Sâu",
+    "title_en": "Hunt Instinct: Abyssal Survival Arena",
+    "description": "Khoảnh khắc rùng rợn khi bầy cá mập đại dương bao vây và xé toạc con mồi giữa làn nước xanh thẳm.",
+    "description_en": "A chilling glimpse of oceanic predators coordinating their deadly strike in the vast blue expanse.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/shark_frenzy_hunt.mp4",
+    "thumbnail_url": "assets/images/creatures/shark_frenzy_hunt.png"
+  },
+  {
+    "title": "Bóng Ma Đáy Biển: Ác Mộng Vùng Nước Đen",
+    "title_en": "Ghost of the Deep: Nightmare in Dark Waters",
+    "description": "Cuộc chạm trán thót tim với bóng đen khổng lồ lướt qua ống kính thợ lặn trong bóng tối vô tận.",
+    "description_en": "A heart-stopping face-to-face encounter with a colossal shadow gliding past diver lenses into the dark.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/deep_shadow_shark.mp4",
+    "thumbnail_url": "assets/images/creatures/deep_shadow_shark.png"
+  },
+  {
+    "title": "Megalodon Tái Sinh: Cơn Thịnh Nộ Tiền Sử",
+    "title_en": "Megalodon Reborn: Prehistoric Fury",
+    "description": "Tái hiện sức mạnh kinh hoàng và hàm răng hủy diệt của siêu thủy quái từng thống trị đại dương cổ đại.",
+    "description_en": "Reliving the terrifying power and crushing bite force of the prehistoric apex behemoth.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/megalodon_strike.mp4",
+    "thumbnail_url": "assets/images/creatures/megalodon_strike.png"
+  },
+  {
+    "title": "Quái Thú Mariana: Hơi Thở Từ Địa Ngục Nước",
+    "title_en": "Mariana Trench Beast: Breath of the Abyss",
+    "description": "Thước phim bí ẩn ghi lại hình bóng cá mập đột biến khổng lồ tuần tra rãnh vực sâu nhất hành tinh.",
+    "description_en": "Mysterious footage capturing a colossal oceanic leviathan patrolling Earth's deepest underwater trench.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/mariana_predator.mp4",
+    "thumbnail_url": "assets/images/creatures/mariana_predator.png"
+  },
+  {
+    "title": "Sát Thủ Biển Cả Orca: Bầy Đàn Tinh Nhuệ",
+    "title_en": "Apex Predator Orca: Mastermind Pack Tactics",
+    "description": "Chứng kiến trí thông minh tàn nhẫn và chiến thuật săn mồi hoàn hảo của loài cá voi sát thủ thống trị chuỗi thức ăn.",
+    "description_en": "Witnessing the ruthless intelligence and coordinated pack tactics of apex killer whales reigning over the oceans.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/orca_pack_assault.mp4",
+    "thumbnail_url": "assets/images/creatures/orca_pack_assault.png"
+  },
+  {
+    "title": "Người Khổng Lồ Đại Dương: Tiếng Gọi Hư Vô",
+    "title_en": "Ocean Colossus: Call from the Void",
+    "description": "Cảm nhận sự nhỏ bé tột cùng trước thân hình đồ sộ hàng trăm tấn và tiếng rên rỉ trầm mặc vang vọng khắp đại dương.",
+    "description_en": "Feeling utterly insignificant before a hundred-ton behemoth echoing haunting calls across thousands of miles.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/titan_blue_whale.mp4",
+    "thumbnail_url": "assets/images/creatures/titan_blue_whale.png"
+  },
+  {
+    "title": "Leviathan Thức Tỉnh: Cú Nhảy Xé Rách Sóng Biển",
+    "title_en": "Leviathan Awakens: The Breaching Titan",
+    "description": "Khoảnh khắc tráng lệ khi sinh vật to lớn nhất hành tinh vút bay lên khỏi mặt nước tạo nên cơn sóng thần mini.",
+    "description_en": "A majestic spectacle as Earth's largest living titan breaches the surface, unleashing tidal waves.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/leviathan_whale_breach.mp4",
+    "thumbnail_url": "assets/images/creatures/leviathan_whale_breach.png"
+  },
+  {
+    "title": "Bản Tình Ca Biển Sâu: Huyền Thoại Lưng Gù",
+    "title_en": "Abyssal Melody: Legend of the Humpback",
+    "description": "Giai điệu trầm bổng kỳ bí dẫn lối các đoàn thám hiểm vào những vùng hải trình chưa từng được vẽ trên bản đồ.",
+    "description_en": "Mysterious acoustic harmonies guiding oceanic voyagers through uncharted deep-sea waters.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/abyssal_humpback_song.mp4",
+    "thumbnail_url": "assets/images/creatures/abyssal_humpback_song.png"
+  },
+  {
+    "title": "Thần Thú Biển Nam Cực: Vũ Điệu Băng Giá",
+    "title_en": "Antarctic Titan: Dance of the Frost Giant",
+    "description": "Thước phim hiếm hoi ghi lại sinh vật khổng lồ luồn lách qua các khối băng trôi tráng lệ ở vùng cực lạnh giá.",
+    "description_en": "Rare footage capturing a majestic whale navigating drifting icebergs in the freezing polar realm.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/antarctic_whale_drift.mp4",
+    "thumbnail_url": "assets/images/creatures/antarctic_whale_drift.png"
+  },
+  {
+    "title": "Xoáy Nước Cực Đại: Bữa Tiệc Của Kẻ Khổng Lồ",
+    "title_en": "Vortex Feeding: Feast of the Megabeast",
+    "description": "Cảnh tượng ngoạn mục khi cá voi tạo lưới bọt khí, mở rộng chiếc miệng khổng lồ nuốt trọn bầy cá trong chớp mắt.",
+    "description_en": "Spectacular bubble-net feeding vortex swallowing entire schools of fish in a single engulfing gulp.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/whale_vortex_feeding.mp4",
+    "thumbnail_url": "assets/images/creatures/whale_vortex_feeding.png"
+  },
+  {
+    "title": "Chạm Trán Chúa Tể Vực Thẳm: Kỷ Lục Lặn Tự Do",
+    "title_en": "Facing the Deep Sovereign: Abyssal Free Dive",
+    "description": "Góc quay tĩnh lặng đến ngạt thở khi thợ lặn bơi sát cạnh vị thần hộ vệ biển cả giữa mê cung thăm thẳm.",
+    "description_en": "A breathless serene encounter as a freediver hovers inches away from the peaceful ocean guardian.",
+    "video_url": "https://codego.io.vn/api/uploads/videos/deep_whale_encounter.mp4",
+    "thumbnail_url": "assets/images/creatures/deep_whale_encounter.png"
   }
 ]

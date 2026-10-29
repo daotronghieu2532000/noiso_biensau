@@ -155,4 +155,12 @@ class AppStrings {
   String get adFreeFailedMsg => _isVi
       ? 'Không thể tải video quảng cáo. Vui lòng thử lại sau!'
       : 'Failed to load rewarded ad. Please try again later!';
+
+  // ── Sailor Stories ───────────────────────────────────────────
+  String get storiesTitle => _isVi ? 'CHUYỆN THỦY THỦ' : 'SAILOR STORIES';
+  String get storiesSubtitle =>
+      _isVi ? 'Hải Trình Ký Sự & Bí Ẩn Biển Sâu' : 'Nautical Lore & Abyssal Chronicles';
+  String get readStory => _isVi ? 'Đọc Ký Sự' : 'Read Chronicle';
+  String get readingTime => _isVi ? 'phút đọc' : 'min read';
+  String get storiesCount => _isVi ? 'câu chuyện' : 'stories';
 }

@@ -30,6 +30,10 @@
 	<true/>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Ứng dụng cần quyền truy cập thông tin để hiển thị quảng cáo phù hợp hơn với nhu cầu của bạn. / This permission is used to deliver personalized ads that are relevant to you.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ứng dụng cần quyền sử dụng micro để ghi âm giọng nói chuyển thành ý kiến đóng góp.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ứng dụng cần quyền nhận diện giọng nói để chuyển lời nói của bạn thành văn bản.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
