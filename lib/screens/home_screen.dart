@@ -1522,11 +1522,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     clipBehavior: Clip.none,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(4.0),
+                        padding: const EdgeInsets.all(2.0),
                         child: Image.asset(
-                          'assets/images/creatures/great_white_shark.png',
-                          width: 48,
-                          height: 48,
+                          'assets/images/icon/skill_bite_shark.png',
+                          width: 50,
+                          height: 50,
                           fit: BoxFit.contain,
                         ),
                       ),

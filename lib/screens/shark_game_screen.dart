@@ -13,14 +13,19 @@ import '../l10n/app_strings.dart';
 import '../services/sound_service.dart';
 
 /// Màn hình Mini-Game "Cá Lớn Nuốt Cá Bé - Sát Thủ Đại Dương" (Shark Apex Hunt)
-/// Sử dụng Engine Lưới Xương Sống 16 Đốt (16-Joint Spine Kinematics + GPU Mesh Skinning drawVertices)
-/// kết hợp 100% tài nguyên hình ảnh 3D chân thực tách nền trong suốt.
+/// Nâng cấp toàn diện:
+/// - 2 Màn chơi riêng biệt (Map 1: Vịnh San Hô & Mặt Biển | Map 2: Rãnh Mariana Núi Lửa Dung Nham)
+/// - Mặt biển có Thuyền đánh cá, Bè gỗ, Thợ săn bắn lao (Harpoon) & Người bơi biết chạy lên thuyền!
+/// - Cơ chế Nhảy Vượt Sóng (Airborne Breach) húc vỡ thuyền ăn thịt người từ LV.3+
+/// - Hiệu ứng tâm lý kích thích: Screen Shake, Low-HP Blood Vignette, Gold Rush Frenzy!
 class SharkGameScreen extends StatefulWidget {
   const SharkGameScreen({super.key});
 
   @override
   State<SharkGameScreen> createState() => _SharkGameScreenState();
 }
+
+enum _GameStageMap { coralBay, volcanicAbyss }
 
 /// Dữ liệu Sprite đã nạp kèm ImageShader trên GPU để uốn lưới xương sống 60-120 FPS
 class _LoadedSpriteMesh {
@@ -29,6 +34,7 @@ class _LoadedSpriteMesh {
   final Paint hitFlashShaderPaint;
   final Paint stunShaderPaint;
   final Paint frenzyShaderPaint;
+  final Paint goldRushShaderPaint;
 
   _LoadedSpriteMesh({required this.image})
       : normalShaderPaint = Paint()
@@ -74,17 +80,28 @@ class _LoadedSpriteMesh {
           ..colorFilter = const ColorFilter.mode(
             Color(0x44FF1744),
             BlendMode.srcATop,
+          ),
+        goldRushShaderPaint = Paint()
+          ..shader = ui.ImageShader(
+            image,
+            TileMode.clamp,
+            TileMode.clamp,
+            Float64List.fromList(Matrix4.identity().storage),
+          )
+          ..filterQuality = FilterQuality.medium
+          ..colorFilter = const ColorFilter.mode(
+            Color(0x77FFD740),
+            BlendMode.srcATop,
           );
 }
 
-/// Cấu hình các cấp tiến hóa của Cá Mập Người Chơi
 class _SharkEvolutionStage {
   final int level;
   final String nameVi;
   final String nameEn;
   final String assetPath;
-  final Rect uvBounds; // Khung UV sát mũi -> đuôi cá trong ảnh gốc (0..1)
-  final double aspectRatio; // Tỷ lệ Dài / Cao thực tế của cơ thể cá
+  final Rect uvBounds;
+  final double aspectRatio;
   final double baseRadius;
   final double lengthMeters;
   final int expRequired;
@@ -108,20 +125,19 @@ class _SharkEvolutionStage {
   });
 }
 
-/// Cấu hình loài sinh vật (100% dùng ảnh 3D tách nền chân thực + Lưới Xương Sống 16 Đốt)
 class _CreatureTemplate {
   final String id;
   final String nameVi;
   final String nameEn;
-  final int tier; // 1 -> 6
+  final int tier;
   final String assetPath;
   final bool assetFacesRight;
-  final Rect uvBounds; // Khung UV sát cơ thể trong ảnh gốc (0..1)
-  final double aspectRatio; // Tỷ lệ Dài / Cao thực tế
+  final Rect uvBounds;
+  final double aspectRatio;
   final double radius;
   final double speed;
-  final double waveAmplitude; // Độ biên độ vẫy đuôi sinh học
-  final double waveFrequency; // Tần số vẫy đuôi
+  final double waveAmplitude;
+  final double waveFrequency;
   final double maxHp;
   final double damage;
   final int expReward;
@@ -129,7 +145,9 @@ class _CreatureTemplate {
   final double minDepthRatio;
   final double maxDepthRatio;
   final bool isAggressive;
-  final int schoolSize; // > 1 thì bơi theo đàn tự nhiên (Boids Schooling)
+  final bool isHuman;
+  final bool isHarpoonHunter;
+  final int schoolSize;
   final Color primaryColor;
 
   const _CreatureTemplate({
@@ -152,12 +170,13 @@ class _CreatureTemplate {
     required this.minDepthRatio,
     required this.maxDepthRatio,
     this.isAggressive = false,
+    this.isHuman = false,
+    this.isHarpoonHunter = false,
     this.schoolSize = 1,
     required this.primaryColor,
   });
 }
 
-/// Thực thể sinh vật đang bơi trong đại dương với Chuỗi Xương Sống 16 Đốt (16-Node Spine Chain)
 class _SeaEntity {
   static const int kSpineJoints = 16;
 
@@ -174,15 +193,14 @@ class _SeaEntity {
   double hitFlashTimer = 0.0;
   double aiChangeTimer = 0.0;
   double biteCooldown = 0.0;
+  double shootCooldown = 1.6;
+  bool isPanicking = false; // Người bơi hoảng loạn bơi về phía thuyền
 
   bool facingRight;
-  double dorsalFlip; // Chuyển tiếp mượt từ +1.0 (phải) <-> -1.0 (trái) khi quay đầu 3D
-
-  // Trạng thái bị hút xoắn vào miệng cá mập khi bị ăn (Swallow Animation giống Feeding Frenzy)
+  double dorsalFlip;
   bool isBeingSwallowed = false;
   double swallowProgress = 0.0;
 
-  // Chuỗi 16 đốt xương sống từ Mõm (index 0) đến Chóp Đuôi (index 15)
   final List<Offset> spineNodes = List<Offset>.filled(kSpineJoints, Offset.zero);
 
   _SeaEntity({
@@ -211,7 +229,53 @@ class _SeaEntity {
   }
 }
 
-/// Vật phẩm rơi ra hoặc ngọc trai hồi phục / thủy lôi
+/// Thuyền đánh cá & Bè gỗ trên mặt biển (Có thể bắn lao vào cá mập yếu, và bị cá mập LV.3+ húc vỡ!)
+class _SurfaceVessel {
+  final bool isFishingBoat; // true: Thuyền đánh cá, false: Bè gỗ
+  double x;
+  double vx;
+  double width;
+  double height;
+  double hp;
+  double maxHp;
+  int passengersCount;
+  double shootCooldown;
+  double bobPhase;
+  double hitFlashTimer = 0.0;
+  double respawnTimer = 0.0;
+  bool isDestroyed = false;
+
+  _SurfaceVessel({
+    required this.isFishingBoat,
+    required this.x,
+    required this.vx,
+    required this.width,
+    required this.height,
+    required this.maxHp,
+    required this.passengersCount,
+    required this.bobPhase,
+  })  : hp = maxHp,
+        shootCooldown = 1.8;
+}
+
+/// Mũi lao (Harpoon) bắn ra từ thuyền hoặc thợ săn dưới nước
+class _HarpoonProjectile {
+  double x;
+  double y;
+  double vx;
+  double vy;
+  double damage;
+  double lifeTimer = 3.2;
+
+  _HarpoonProjectile({
+    required this.x,
+    required this.y,
+    required this.vx,
+    required this.vy,
+    required this.damage,
+  });
+}
+
 enum _PickupType { meatChunk, healingPearl, goldenStar, navalMine }
 
 class _OceanPickup {
@@ -236,7 +300,6 @@ class _OceanPickup {
   });
 }
 
-/// Hiệu ứng hạt (Máu, Bọt khí, Tia sáng tiến hóa)
 class _GameParticle {
   double x;
   double y;
@@ -259,12 +322,11 @@ class _GameParticle {
   });
 }
 
-/// Chữ nổi trên màn hình (+EXP, +HP, ĐỚP!, TIẾN HÓA!)
 class _FloatingTextPopup {
   String text;
   double x;
   double y;
-  double vy = -42.0;
+  double vy = -44.0;
   double alpha = 1.0;
   Color color;
   double fontSize;
@@ -278,7 +340,6 @@ class _FloatingTextPopup {
   });
 }
 
-/// Sóng xung kích (Sonar Roar / Level Up / Mine Explosion)
 class _ShockwaveRing {
   double x;
   double y;
@@ -298,12 +359,13 @@ class _ShockwaveRing {
 
 class _SharkGameScreenState extends State<SharkGameScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  static const double worldWidth = 4000.0;
-  static const double worldHeight = 2500.0;
+  static const double worldWidth = 4200.0;
+  static const double worldHeight = 2600.0;
+  static const double seaSurfaceY = 230.0; // Vùng Y < 230 là Bầu Trời để Cá Mập nhảy vượt sóng!
   static const int kPlayerSpineJoints = 16;
   static const String _highScoreKey = 'shark_game_high_score_v1';
 
-  // Danh sách 6 cấp tiến hóa của Cá Mập Người Chơi (Kèm khung UV sát cơ thể)
+  // Danh sách 6 cấp tiến hóa của Cá Mập Người Chơi (Đã cân bằng độ khó thử thách)
   static const List<_SharkEvolutionStage> _evolutionStages = [
     _SharkEvolutionStage(
       level: 1,
@@ -314,9 +376,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       aspectRatio: 2.58,
       baseRadius: 36.0,
       lengthMeters: 1.8,
-      expRequired: 120,
+      expRequired: 160,
       maxHp: 100.0,
-      biteDamage: 38.0,
+      biteDamage: 32.0,
       auraColor: Color(0xFF00E5FF),
     ),
     _SharkEvolutionStage(
@@ -328,9 +390,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       aspectRatio: 2.63,
       baseRadius: 46.0,
       lengthMeters: 4.2,
-      expRequired: 300,
-      maxHp: 155.0,
-      biteDamage: 65.0,
+      expRequired: 400,
+      maxHp: 145.0,
+      biteDamage: 56.0,
       auraColor: Color(0xFF00FF88),
     ),
     _SharkEvolutionStage(
@@ -342,9 +404,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       aspectRatio: 2.95,
       baseRadius: 56.0,
       lengthMeters: 6.8,
-      expRequired: 600,
-      maxHp: 230.0,
-      biteDamage: 100.0,
+      expRequired: 780,
+      maxHp: 210.0,
+      biteDamage: 92.0,
       auraColor: Color(0xFF64FFDA),
     ),
     _SharkEvolutionStage(
@@ -356,9 +418,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       aspectRatio: 2.15,
       baseRadius: 68.0,
       lengthMeters: 10.5,
-      expRequired: 1050,
-      maxHp: 340.0,
-      biteDamage: 155.0,
+      expRequired: 1350,
+      maxHp: 310.0,
+      biteDamage: 145.0,
       auraColor: Color(0xFFFFD740),
     ),
     _SharkEvolutionStage(
@@ -370,9 +432,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       aspectRatio: 2.15,
       baseRadius: 82.0,
       lengthMeters: 20.0,
-      expRequired: 1800,
-      maxHp: 490.0,
-      biteDamage: 240.0,
+      expRequired: 2300,
+      maxHp: 450.0,
+      biteDamage: 225.0,
       auraColor: Color(0xFFFF5252),
     ),
     _SharkEvolutionStage(
@@ -382,18 +444,88 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetPath: 'assets/images/creatures/reaper_leviathan.png',
       uvBounds: Rect.fromLTRB(0.057, 0.345, 0.960, 0.682),
       aspectRatio: 2.68,
-      baseRadius: 96.0,
+      baseRadius: 94.0,
       lengthMeters: 36.0,
-      expRequired: 999999,
-      maxHp: 720.0,
-      biteDamage: 380.0,
+      expRequired: 3200,
+      maxHp: 640.0,
+      biteDamage: 340.0,
       auraColor: Color(0xFFE040FB),
+    ),
+    _SharkEvolutionStage(
+      level: 7,
+      nameVi: 'Thủy Quái Bóng Ma Ghost Leviathan',
+      nameEn: 'Phantom Ghost Leviathan',
+      assetPath: 'assets/images/creatures/ghost_leviathan.png',
+      uvBounds: Rect.fromLTRB(0.070, 0.076, 1.000, 1.000),
+      aspectRatio: 2.15,
+      baseRadius: 102.0,
+      lengthMeters: 44.0,
+      expRequired: 4600,
+      maxHp: 780.0,
+      biteDamage: 430.0,
+      auraColor: Color(0xFF00E5FF),
+    ),
+    _SharkEvolutionStage(
+      level: 8,
+      nameVi: 'Rắn Biển Thần Thoại Jormungandr',
+      nameEn: 'World Serpent Jormungandr',
+      assetPath: 'assets/images/creatures/jormungandr.png',
+      uvBounds: Rect.fromLTRB(0.025, 0.145, 0.980, 0.875),
+      aspectRatio: 1.55,
+      baseRadius: 112.0,
+      lengthMeters: 56.0,
+      expRequired: 6400,
+      maxHp: 960.0,
+      biteDamage: 540.0,
+      auraColor: Color(0xFF00E676),
+    ),
+    _SharkEvolutionStage(
+      level: 9,
+      nameVi: 'Khủng Long Biển Mosasaurus',
+      nameEn: 'Prehistoric Mosasaurus',
+      assetPath: 'assets/images/creatures/game_mosasaurus.png',
+      uvBounds: Rect.fromLTRB(0.0, 0.0, 1.0, 1.0),
+      aspectRatio: 3.40,
+      baseRadius: 122.0,
+      lengthMeters: 68.0,
+      expRequired: 8800,
+      maxHp: 1220.0,
+      biteDamage: 720.0,
+      auraColor: Color(0xFF40C4FF),
+    ),
+    _SharkEvolutionStage(
+      level: 10,
+      nameVi: 'Hải Quái Nguyên Tử Godzilla',
+      nameEn: 'Atomic Kaiju Godzilla',
+      assetPath: 'assets/images/creatures/game_godzilla_swim.png',
+      uvBounds: Rect.fromLTRB(0.0, 0.0, 1.0, 1.0),
+      aspectRatio: 2.90,
+      baseRadius: 132.0,
+      lengthMeters: 95.0,
+      expRequired: 12000,
+      maxHp: 1580.0,
+      biteDamage: 960.0,
+      auraColor: Color(0xFF2979FF),
+    ),
+    _SharkEvolutionStage(
+      level: 11,
+      nameVi: 'Hoàng Đế Vực Thẳm Void Leviathan',
+      nameEn: 'Abyssal Void Emperor',
+      assetPath: 'assets/images/creatures/game_void_cthulhu.png',
+      uvBounds: Rect.fromLTRB(0.0, 0.0, 1.0, 1.0),
+      aspectRatio: 3.40,
+      baseRadius: 144.0,
+      lengthMeters: 135.0,
+      expRequired: 999999,
+      maxHp: 2100.0,
+      biteDamage: 1350.0,
+      auraColor: Color(0xFF00F0FF),
     ),
   ];
 
-  // Danh mục 20 loài sinh vật biển sử dụng 100% ảnh 3D chân thực tách nền + uốn xương sống
+  // Danh mục hơn 22 loài sinh vật & con người
   static const List<_CreatureTemplate> _speciesCatalog = [
-    // ── TIER 1: ĐÀN CÁ CON MỒI (Bơi theo đàn Boids, ăn ngay từ Cấp 1) ──
+    // ── TIER 1: ĐÀN CÁ CON MỒI ──
     _CreatureTemplate(
       id: 'clownfish',
       nameVi: 'Cá Hề Rạn San Hô',
@@ -403,14 +535,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 1.83,
       radius: 17.0,
-      speed: 88.0,
+      speed: 94.0,
       waveAmplitude: 0.19,
-      waveFrequency: 7.2,
+      waveFrequency: 7.4,
       maxHp: 15.0,
       damage: 0.0,
-      expReward: 13,
-      scoreReward: 55,
-      minDepthRatio: 0.04,
+      expReward: 11,
+      scoreReward: 50,
+      minDepthRatio: 0.12,
       maxDepthRatio: 0.45,
       schoolSize: 5,
       primaryColor: Color(0xFFFF6D00),
@@ -424,14 +556,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 2.00,
       radius: 19.0,
-      speed: 96.0,
+      speed: 102.0,
       waveAmplitude: 0.18,
       waveFrequency: 7.0,
       maxHp: 18.0,
       damage: 0.0,
-      expReward: 15,
-      scoreReward: 65,
-      minDepthRatio: 0.05,
+      expReward: 13,
+      scoreReward: 60,
+      minDepthRatio: 0.13,
       maxDepthRatio: 0.50,
       schoolSize: 5,
       primaryColor: Color(0xFF00B0FF),
@@ -445,14 +577,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 2.32,
       radius: 23.0,
-      speed: 125.0,
+      speed: 132.0,
       waveAmplitude: 0.16,
       waveFrequency: 7.8,
       maxHp: 22.0,
       damage: 0.0,
-      expReward: 19,
-      scoreReward: 90,
-      minDepthRatio: 0.07,
+      expReward: 17,
+      scoreReward: 85,
+      minDepthRatio: 0.15,
       maxDepthRatio: 0.65,
       schoolSize: 4,
       primaryColor: Color(0xFFFFD54F),
@@ -467,20 +599,42 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.117, 0.342, 0.892, 0.697),
       aspectRatio: 2.18,
       radius: 24.0,
-      speed: 68.0,
+      speed: 72.0,
       waveAmplitude: 0.11,
       waveFrequency: 5.2,
       maxHp: 24.0,
-      damage: 4.0,
-      expReward: 22,
-      scoreReward: 100,
-      minDepthRatio: 0.42,
+      damage: 5.0,
+      expReward: 20,
+      scoreReward: 95,
+      minDepthRatio: 0.44,
       maxDepthRatio: 0.95,
       schoolSize: 2,
       primaryColor: Color(0xFFB0BEC5),
     ),
+    // NGƯỜI BƠI TRÊN MẶT BIỂN (Ăn ngay từ LV.1, hồi nhiều máu & EXP, thấy cá mập sẽ bơi chạy lên thuyền!)
+    _CreatureTemplate(
+      id: 'surface_swimmer',
+      nameVi: 'Người Bơi Mặt Biển',
+      nameEn: 'Ocean Swimmer',
+      tier: 1,
+      assetPath: 'assets/images/creatures/game_swimmer.png',
+      assetFacesRight: false,
+      aspectRatio: 3.6,
+      radius: 26.0,
+      speed: 88.0,
+      waveAmplitude: 0.09,
+      waveFrequency: 6.4,
+      maxHp: 22.0,
+      damage: 0.0,
+      expReward: 34,
+      scoreReward: 180,
+      minDepthRatio: 0.095,
+      maxDepthRatio: 0.125,
+      isHuman: true,
+      primaryColor: Color(0xFFFF6D00),
+    ),
 
-    // ── TIER 2: SINH VẬT TẦNG TRUNG (Rùa biển, Cá đuối, Bạch tuộc, Cá lồng đèn) ──
+    // ── TIER 2: SINH VẬT TẦNG TRUNG & THỢ SĂN BẮN LAO ──
     _CreatureTemplate(
       id: 'sea_turtle',
       nameVi: 'Rùa Biển Cổ Đại',
@@ -490,14 +644,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 2.07,
       radius: 32.0,
-      speed: 82.0,
+      speed: 86.0,
       waveAmplitude: 0.12,
       waveFrequency: 4.5,
-      maxHp: 55.0,
-      damage: 6.0,
-      expReward: 38,
-      scoreReward: 160,
-      minDepthRatio: 0.06,
+      maxHp: 58.0,
+      damage: 8.0,
+      expReward: 36,
+      scoreReward: 155,
+      minDepthRatio: 0.14,
       maxDepthRatio: 0.55,
       primaryColor: Color(0xFF00E676),
     ),
@@ -510,16 +664,38 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 3.10,
       radius: 38.0,
-      speed: 98.0,
+      speed: 102.0,
       waveAmplitude: 0.20,
       waveFrequency: 4.8,
-      maxHp: 62.0,
-      damage: 8.0,
-      expReward: 44,
-      scoreReward: 190,
-      minDepthRatio: 0.10,
+      maxHp: 64.0,
+      damage: 10.0,
+      expReward: 42,
+      scoreReward: 185,
+      minDepthRatio: 0.16,
       maxDepthRatio: 0.68,
       primaryColor: Color(0xFF40C4FF),
+    ),
+    _CreatureTemplate(
+      id: 'harpoon_hunter',
+      nameVi: 'Thợ Săn Bắn Lao',
+      nameEn: 'Harpoon Diver Hunter',
+      tier: 2,
+      assetPath: 'assets/images/creatures/game_harpoon_hunter.png',
+      assetFacesRight: false,
+      aspectRatio: 1.65,
+      radius: 32.0,
+      speed: 82.0,
+      waveAmplitude: 0.10,
+      waveFrequency: 4.4,
+      maxHp: 68.0,
+      damage: 20.0,
+      expReward: 62,
+      scoreReward: 320,
+      minDepthRatio: 0.15,
+      maxDepthRatio: 0.72,
+      isHuman: true,
+      isHarpoonHunter: true,
+      primaryColor: Color(0xFFFF1744),
     ),
     _CreatureTemplate(
       id: 'red_octopus',
@@ -527,17 +703,17 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       nameEn: 'Pacific Red Octopus',
       tier: 2,
       assetPath: 'assets/images/creatures/game_red_octopus.png',
-      assetFacesRight: true, // Đầu bên phải, xúc tu vẫy bên trái
+      assetFacesRight: true,
       aspectRatio: 2.85,
       radius: 35.0,
-      speed: 94.0,
+      speed: 98.0,
       waveAmplitude: 0.22,
       waveFrequency: 5.6,
-      maxHp: 64.0,
-      damage: 12.0,
-      expReward: 46,
-      scoreReward: 210,
-      minDepthRatio: 0.18,
+      maxHp: 66.0,
+      damage: 14.0,
+      expReward: 45,
+      scoreReward: 205,
+      minDepthRatio: 0.22,
       maxDepthRatio: 0.82,
       primaryColor: Color(0xFFFF5252),
     ),
@@ -551,14 +727,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.213, 0.088, 0.923, 0.830),
       aspectRatio: 1.25,
       radius: 32.0,
-      speed: 90.0,
+      speed: 95.0,
       waveAmplitude: 0.14,
       waveFrequency: 6.0,
-      maxHp: 65.0,
-      damage: 15.0,
+      maxHp: 68.0,
+      damage: 18.0,
       expReward: 48,
       scoreReward: 220,
-      minDepthRatio: 0.30,
+      minDepthRatio: 0.32,
       maxDepthRatio: 0.86,
       isAggressive: true,
       primaryColor: Color(0xFF00E5FF),
@@ -573,14 +749,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.085, 0.173, 0.868, 0.822),
       aspectRatio: 1.55,
       radius: 34.0,
-      speed: 102.0,
+      speed: 106.0,
       waveAmplitude: 0.21,
       waveFrequency: 6.4,
-      maxHp: 70.0,
-      damage: 16.0,
-      expReward: 52,
-      scoreReward: 240,
-      minDepthRatio: 0.34,
+      maxHp: 72.0,
+      damage: 19.0,
+      expReward: 50,
+      scoreReward: 235,
+      minDepthRatio: 0.36,
       maxDepthRatio: 0.90,
       isAggressive: true,
       primaryColor: Color(0xFFFF4081),
@@ -595,19 +771,19 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.123, 0.248, 0.938, 0.817),
       aspectRatio: 1.55,
       radius: 34.0,
-      speed: 96.0,
+      speed: 100.0,
       waveAmplitude: 0.18,
       waveFrequency: 5.5,
-      maxHp: 68.0,
-      damage: 14.0,
-      expReward: 50,
-      scoreReward: 230,
-      minDepthRatio: 0.32,
+      maxHp: 70.0,
+      damage: 17.0,
+      expReward: 48,
+      scoreReward: 225,
+      minDepthRatio: 0.34,
       maxDepthRatio: 0.88,
       primaryColor: Color(0xFFFF1744),
     ),
 
-    // ── TIER 3: THỢ SĂN TỐC ĐỘ (Cá Kiếm, Cá Mập Đầu Búa, Cá Mái Chèo, Mực Khổng Lồ) ──
+    // ── TIER 3: THỢ SĂN TỐC ĐỘ ──
     _CreatureTemplate(
       id: 'swordfish',
       nameVi: 'Cá Kiếm Đại Dương',
@@ -617,14 +793,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 2.85,
       radius: 44.0,
-      speed: 132.0,
+      speed: 138.0,
       waveAmplitude: 0.17,
       waveFrequency: 7.4,
-      maxHp: 115.0,
-      damage: 22.0,
-      expReward: 85,
+      maxHp: 120.0,
+      damage: 28.0,
+      expReward: 84,
       scoreReward: 400,
-      minDepthRatio: 0.10,
+      minDepthRatio: 0.16,
       maxDepthRatio: 0.70,
       isAggressive: true,
       primaryColor: Color(0xFF448AFF),
@@ -638,14 +814,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       assetFacesRight: false,
       aspectRatio: 2.59,
       radius: 46.0,
-      speed: 118.0,
+      speed: 124.0,
       waveAmplitude: 0.17,
       waveFrequency: 6.5,
-      maxHp: 125.0,
-      damage: 24.0,
-      expReward: 92,
+      maxHp: 130.0,
+      damage: 30.0,
+      expReward: 90,
       scoreReward: 440,
-      minDepthRatio: 0.12,
+      minDepthRatio: 0.18,
       maxDepthRatio: 0.75,
       isAggressive: true,
       primaryColor: Color(0xFF26A69A),
@@ -660,14 +836,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.037, 0.307, 0.885, 0.692),
       aspectRatio: 2.40,
       radius: 46.0,
-      speed: 98.0,
+      speed: 102.0,
       waveAmplitude: 0.25,
       waveFrequency: 6.2,
-      maxHp: 120.0,
-      damage: 20.0,
-      expReward: 88,
+      maxHp: 125.0,
+      damage: 25.0,
+      expReward: 86,
       scoreReward: 420,
-      minDepthRatio: 0.25,
+      minDepthRatio: 0.28,
       maxDepthRatio: 0.84,
       primaryColor: Color(0xFF80D8FF),
     ),
@@ -677,24 +853,24 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       nameEn: 'Architeuthis Giant Squid',
       tier: 3,
       assetPath: 'assets/images/creatures/giant_squid.png',
-      assetFacesRight: true, // Đầu/thân bên phải, xúc tu bên trái
+      assetFacesRight: true,
       uvBounds: Rect.fromLTRB(0.067, 0.228, 0.943, 0.965),
       aspectRatio: 1.65,
       radius: 48.0,
-      speed: 112.0,
+      speed: 116.0,
       waveAmplitude: 0.20,
       waveFrequency: 5.8,
-      maxHp: 140.0,
-      damage: 26.0,
-      expReward: 105,
+      maxHp: 145.0,
+      damage: 32.0,
+      expReward: 102,
       scoreReward: 500,
-      minDepthRatio: 0.30,
+      minDepthRatio: 0.32,
       maxDepthRatio: 0.90,
       isAggressive: true,
       primaryColor: Color(0xFFFF9100),
     ),
 
-    // ── TIER 4: SÁT THỦ ĐẠI DƯƠNG (Cá Mập Bắc Cực, Cá Voi Lưng Gù, Hổ Kình Orca) ──
+    // ── TIER 4: SÁT THỦ ĐẠI DƯƠNG ──
     _CreatureTemplate(
       id: 'greenland_enemy',
       nameVi: 'Cá Mập Bắc Cực',
@@ -705,14 +881,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.128, 0.342, 0.928, 0.603),
       aspectRatio: 2.95,
       radius: 56.0,
-      speed: 100.0,
+      speed: 106.0,
       waveAmplitude: 0.16,
       waveFrequency: 5.4,
-      maxHp: 210.0,
-      damage: 34.0,
+      maxHp: 220.0,
+      damage: 42.0,
       expReward: 155,
       scoreReward: 760,
-      minDepthRatio: 0.35,
+      minDepthRatio: 0.36,
       maxDepthRatio: 0.92,
       isAggressive: true,
       primaryColor: Color(0xFF26A69A),
@@ -727,14 +903,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.155, 0.368, 0.924, 0.788),
       aspectRatio: 2.45,
       radius: 64.0,
-      speed: 86.0,
+      speed: 90.0,
       waveAmplitude: 0.14,
       waveFrequency: 4.5,
-      maxHp: 250.0,
-      damage: 30.0,
+      maxHp: 260.0,
+      damage: 38.0,
       expReward: 180,
       scoreReward: 880,
-      minDepthRatio: 0.14,
+      minDepthRatio: 0.18,
       maxDepthRatio: 0.74,
       primaryColor: Color(0xFF4FC3F7),
     ),
@@ -748,20 +924,20 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.089, 0.243, 0.744, 0.663),
       aspectRatio: 2.15,
       radius: 62.0,
-      speed: 120.0,
+      speed: 126.0,
       waveAmplitude: 0.16,
       waveFrequency: 5.8,
-      maxHp: 240.0,
-      damage: 38.0,
+      maxHp: 250.0,
+      damage: 46.0,
       expReward: 190,
       scoreReward: 950,
-      minDepthRatio: 0.15,
+      minDepthRatio: 0.18,
       maxDepthRatio: 0.78,
       isAggressive: true,
       primaryColor: Color(0xFFFFD740),
     ),
 
-    // ── TIER 5: QUÁI VẬT CỔ ĐẠI (Megalodon, Kraken, The Bloop) ──
+    // ── TIER 5: QUÁI VẬT CỔ ĐẠI ──
     _CreatureTemplate(
       id: 'the_bloop_boss',
       nameVi: 'Quái Vật Sóng Âm The Bloop',
@@ -772,11 +948,11 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.142, 0.003, 0.958, 0.865),
       aspectRatio: 1.55,
       radius: 72.0,
-      speed: 98.0,
+      speed: 104.0,
       waveAmplitude: 0.15,
       waveFrequency: 5.0,
-      maxHp: 350.0,
-      damage: 48.0,
+      maxHp: 370.0,
+      damage: 58.0,
       expReward: 280,
       scoreReward: 1450,
       minDepthRatio: 0.45,
@@ -794,11 +970,11 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.033, 0.258, 0.985, 0.713),
       aspectRatio: 2.15,
       radius: 76.0,
-      speed: 116.0,
+      speed: 124.0,
       waveAmplitude: 0.17,
       waveFrequency: 5.6,
-      maxHp: 390.0,
-      damage: 55.0,
+      maxHp: 410.0,
+      damage: 65.0,
       expReward: 320,
       scoreReward: 1700,
       minDepthRatio: 0.45,
@@ -816,11 +992,11 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.040, 0.054, 1.000, 1.000),
       aspectRatio: 1.45,
       radius: 75.0,
-      speed: 96.0,
+      speed: 102.0,
       waveAmplitude: 0.18,
       waveFrequency: 5.2,
-      maxHp: 380.0,
-      damage: 52.0,
+      maxHp: 400.0,
+      damage: 62.0,
       expReward: 310,
       scoreReward: 1650,
       minDepthRatio: 0.55,
@@ -829,7 +1005,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       primaryColor: Color(0xFFFF1744),
     ),
 
-    // ── TIER 6: THẦN THOẠI ĐÁY VỰC (Reaper Leviathan, Lagiacrus, Leviathan) ──
+    // ── TIER 6: THẦN THOẠI ĐÁY VỰC ──
     _CreatureTemplate(
       id: 'reaper_boss',
       nameVi: 'Reaper Leviathan',
@@ -840,14 +1016,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.057, 0.345, 0.960, 0.682),
       aspectRatio: 2.68,
       radius: 90.0,
-      speed: 122.0,
+      speed: 132.0,
       waveAmplitude: 0.22,
       waveFrequency: 6.2,
-      maxHp: 520.0,
-      damage: 68.0,
+      maxHp: 560.0,
+      damage: 80.0,
       expReward: 490,
       scoreReward: 2900,
-      minDepthRatio: 0.65,
+      minDepthRatio: 0.62,
       maxDepthRatio: 0.98,
       isAggressive: true,
       primaryColor: Color(0xFFD50000),
@@ -862,14 +1038,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.033, 0.293, 0.972, 0.762),
       aspectRatio: 2.15,
       radius: 88.0,
-      speed: 118.0,
+      speed: 128.0,
       waveAmplitude: 0.21,
       waveFrequency: 6.0,
-      maxHp: 500.0,
-      damage: 65.0,
+      maxHp: 540.0,
+      damage: 76.0,
       expReward: 470,
       scoreReward: 2700,
-      minDepthRatio: 0.62,
+      minDepthRatio: 0.60,
       maxDepthRatio: 0.98,
       isAggressive: true,
       primaryColor: Color(0xFF00E5FF),
@@ -884,17 +1060,126 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       uvBounds: Rect.fromLTRB(0.042, 0.158, 0.972, 0.805),
       aspectRatio: 1.65,
       radius: 86.0,
-      speed: 116.0,
+      speed: 126.0,
       waveAmplitude: 0.20,
       waveFrequency: 5.8,
-      maxHp: 510.0,
-      damage: 66.0,
+      maxHp: 550.0,
+      damage: 78.0,
       expReward: 480,
       scoreReward: 2800,
-      minDepthRatio: 0.64,
+      minDepthRatio: 0.62,
       maxDepthRatio: 0.98,
       isAggressive: true,
       primaryColor: Color(0xFF00E676),
+    ),
+
+    // ── TIER 7-11: BOSS TỐI THƯỢNG VỰC SÂU (Ghost Leviathan, Jormungandr, Mosasaurus, Godzilla, Void Emperor) ──
+    _CreatureTemplate(
+      id: 'ghost_leviathan_boss',
+      nameVi: 'Thủy Quái Bóng Ma Ghost Leviathan',
+      nameEn: 'Phantom Ghost Leviathan',
+      tier: 7,
+      assetPath: 'assets/images/creatures/ghost_leviathan.png',
+      assetFacesRight: false,
+      uvBounds: Rect.fromLTRB(0.070, 0.076, 1.000, 1.000),
+      aspectRatio: 2.15,
+      radius: 94.0,
+      speed: 136.0,
+      waveAmplitude: 0.22,
+      waveFrequency: 6.2,
+      maxHp: 720.0,
+      damage: 94.0,
+      expReward: 620,
+      scoreReward: 3900,
+      minDepthRatio: 0.52,
+      maxDepthRatio: 0.96,
+      isAggressive: true,
+      primaryColor: Color(0xFF00E5FF),
+    ),
+    _CreatureTemplate(
+      id: 'jormungandr_boss',
+      nameVi: 'Rắn Biển Thần Thoại Jormungandr',
+      nameEn: 'World Serpent Jormungandr',
+      tier: 8,
+      assetPath: 'assets/images/creatures/jormungandr.png',
+      assetFacesRight: false,
+      uvBounds: Rect.fromLTRB(0.025, 0.145, 0.980, 0.875),
+      aspectRatio: 1.55,
+      radius: 104.0,
+      speed: 132.0,
+      waveAmplitude: 0.21,
+      waveFrequency: 5.8,
+      maxHp: 940.0,
+      damage: 112.0,
+      expReward: 820,
+      scoreReward: 5200,
+      minDepthRatio: 0.58,
+      maxDepthRatio: 0.97,
+      isAggressive: true,
+      primaryColor: Color(0xFF00E676),
+    ),
+    _CreatureTemplate(
+      id: 'mosasaurus_titan',
+      nameVi: 'Khủng Long Biển Mosasaurus',
+      nameEn: 'Prehistoric Mosasaurus',
+      tier: 9,
+      assetPath: 'assets/images/creatures/game_mosasaurus.png',
+      assetFacesRight: false,
+      aspectRatio: 3.40,
+      radius: 110.0,
+      speed: 140.0,
+      waveAmplitude: 0.21,
+      waveFrequency: 6.0,
+      maxHp: 1120.0,
+      damage: 128.0,
+      expReward: 1020,
+      scoreReward: 6800,
+      minDepthRatio: 0.62,
+      maxDepthRatio: 0.98,
+      isAggressive: true,
+      primaryColor: Color(0xFF40C4FF),
+    ),
+    _CreatureTemplate(
+      id: 'godzilla_kaiju',
+      nameVi: 'Hải Quái Nguyên Tử Godzilla',
+      nameEn: 'Atomic Kaiju Godzilla',
+      tier: 10,
+      assetPath: 'assets/images/creatures/game_godzilla_swim.png',
+      assetFacesRight: false,
+      aspectRatio: 2.90,
+      radius: 122.0,
+      speed: 134.0,
+      waveAmplitude: 0.19,
+      waveFrequency: 5.4,
+      maxHp: 1450.0,
+      damage: 155.0,
+      expReward: 1350,
+      scoreReward: 8900,
+      minDepthRatio: 0.68,
+      maxDepthRatio: 0.98,
+      isAggressive: true,
+      primaryColor: Color(0xFF2979FF),
+    ),
+    _CreatureTemplate(
+      id: 'void_cthulhu_god',
+      nameVi: 'Hoàng Đế Vực Thẳm Void Leviathan',
+      nameEn: 'Abyssal Void Emperor',
+      tier: 11,
+      assetPath: 'assets/images/creatures/game_void_cthulhu.png',
+      assetFacesRight: false,
+      aspectRatio: 3.40,
+      radius: 134.0,
+      speed: 142.0,
+      waveAmplitude: 0.22,
+      waveFrequency: 5.6,
+      maxHp: 1920.0,
+      damage: 185.0,
+      expReward: 1850,
+      scoreReward: 12500,
+      minDepthRatio: 0.72,
+      maxDepthRatio: 0.98,
+      isAggressive: true,
+      primaryColor: Color(0xFF00F0FF),
     ),
   ];
 
@@ -908,16 +1193,21 @@ class _SharkGameScreenState extends State<SharkGameScreen>
   bool _isGameOver = false;
   bool _showHelpOverlay = false;
 
+  // Màn chơi hiện tại (Map 1: Vịnh San Hô | Map 2: Rãnh Mariana Dung Nham)
+  _GameStageMap _currentMap = _GameStageMap.coralBay;
+  bool _map2UnlockedBannerShown = false;
+
   // Trạng thái & Chuỗi Xương Sống 16 Đốt của Cá Mập Người Chơi
   int _stageIndex = 0;
   double _playerX = worldWidth * 0.5;
-  double _playerY = 340.0;
+  double _playerY = 460.0;
   double _playerVx = 120.0;
   double _playerVy = 0.0;
   double _playerHeadingAngle = 0.0;
   bool _playerFacingRight = true;
-  double _playerDorsalFlip = 1.0; // +1.0 (phải) <-> -1.0 (trái)
+  double _playerDorsalFlip = 1.0;
   double _playerSwimPhase = 0.0;
+  bool _wasAirborne = false;
   final List<Offset> _playerSpine =
       List<Offset>.filled(kPlayerSpineJoints, Offset.zero);
 
@@ -929,13 +1219,19 @@ class _SharkGameScreenState extends State<SharkGameScreen>
   int _fishEatenCount = 0;
   int _nextSchoolGroupId = 1;
 
-  // Combo & Fury (Cuồng Nộ)
+  // Combo, Gold Rush & Fury (Cuồng Nộ)
   int _comboCount = 0;
   double _comboTimer = 0.0;
   double _furyCharge = 0.0;
   double _frenzyTimer = 0.0;
+  bool get _isGoldRushActive => _comboCount >= 6 || _frenzyTimer > 0;
 
-  // Kỹ năng chủ động
+  // Hiệu ứng kích thích tâm lý người chơi (Screen Shake & Low-HP Pulse)
+  double _screenShakeTimer = 0.0;
+  double _screenShakeIntensity = 0.0;
+  double _lowHpPulsePhase = 0.0;
+
+  // Kỹ năng chủ động (Cân bằng Cooldown khó hơn)
   bool _isBoosting = false;
   double _biteAnimTimer = 0.0;
   double _biteCooldown = 0.0;
@@ -951,8 +1247,10 @@ class _SharkGameScreenState extends State<SharkGameScreen>
   Offset? _joystickOrigin;
   Offset? _joystickCurrent;
 
-  // Danh sách thực thể trong thế giới
+  // Danh sách thực thể, Thuyền/Bè mặt biển, Mũi lao (Harpoon) & Vật phẩm
   final List<_SeaEntity> _entities = [];
+  final List<_SurfaceVessel> _vessels = [];
+  final List<_HarpoonProjectile> _harpoons = [];
   final List<_OceanPickup> _pickups = [];
   final List<_GameParticle> _particles = [];
   final List<_FloatingTextPopup> _popups = [];
@@ -967,7 +1265,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     _lockLandscapeMode();
     _loadHighScore();
     _preloadSprites();
-    _initOceanWorld();
+    _initOceanWorld(map: _GameStageMap.coralBay);
 
     _gameTicker = createTicker(_onTick)..start();
   }
@@ -1013,6 +1311,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     final Set<String> paths = {
       for (final s in _evolutionStages) s.assetPath,
       for (final c in _speciesCatalog) c.assetPath,
+      'assets/images/creatures/game_fishing_boat.png',
+      'assets/images/creatures/game_wooden_raft.png',
     };
 
     for (final path in paths) {
@@ -1020,7 +1320,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         final ByteData data = await rootBundle.load(path);
         final ui.Codec codec = await ui.instantiateImageCodec(
           data.buffer.asUint8List(),
-          targetWidth: 420,
+          targetWidth: 440,
         );
         final ui.FrameInfo frame = await codec.getNextFrame();
         _loadedMeshes[path] = _LoadedSpriteMesh(image: frame.image);
@@ -1038,26 +1338,32 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     }
   }
 
-  void _initOceanWorld() {
-    _stageIndex = 0;
+  void _initOceanWorld({required _GameStageMap map, bool preserveProgress = false}) {
+    _currentMap = map;
+    if (!preserveProgress) {
+      _stageIndex = 0;
+      _exp = 0;
+      _score = 0;
+      _fishEatenCount = 0;
+      _comboCount = 0;
+      _comboTimer = 0.0;
+      _furyCharge = 25.0;
+      _frenzyTimer = 0.0;
+      _map2UnlockedBannerShown = false;
+    }
+
     _playerX = worldWidth * 0.5;
-    _playerY = 340.0;
+    _playerY = seaSurfaceY + 210.0;
     _playerVx = 95.0;
     _playerVy = 0.0;
     _playerHeadingAngle = 0.0;
     _playerFacingRight = true;
     _playerDorsalFlip = 1.0;
+    _wasAirborne = false;
     _initPlayerSpine();
 
     _hp = _currentStage.maxHp;
     _stamina = 100.0;
-    _exp = 0;
-    _score = 0;
-    _fishEatenCount = 0;
-    _comboCount = 0;
-    _comboTimer = 0.0;
-    _furyCharge = 35.0;
-    _frenzyTimer = 0.0;
     _biteAnimTimer = 0.0;
     _biteCooldown = 0.0;
     _vortexTimer = 0.0;
@@ -1068,36 +1374,108 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     _isPaused = false;
 
     _entities.clear();
+    _vessels.clear();
+    _harpoons.clear();
     _pickups.clear();
     _particles.clear();
     _popups.clear();
     _shockwaves.clear();
 
-    // Khởi tạo các đàn cá & sinh vật đại dương
-    while (_entities.length < 68) {
+    // Khởi tạo Thuyền đánh cá & Bè gỗ trên mặt biển (Màn 1 nhiều thuyền bè & người bơi hơn)
+    final int vesselCount = map == _GameStageMap.coralBay ? 7 : 4;
+    for (int i = 0; i < vesselCount; i++) {
+      final bool isBoat = i % 2 == 0;
+      final double vx = (i % 2 == 0 ? 1.0 : -1.0) * (isBoat ? 42.0 : 28.0);
+      _vessels.add(
+        _SurfaceVessel(
+          isFishingBoat: isBoat,
+          x: 320.0 + i * ((worldWidth - 640.0) / vesselCount),
+          vx: vx,
+          width: isBoat ? 220.0 : 165.0,
+          height: isBoat ? 150.0 : 100.0,
+          maxHp: isBoat ? 260.0 : 145.0, // Thuyền trâu lì hơn, cần lao đớp nhiều phát!
+          passengersCount: isBoat ? 3 : 2,
+          bobPhase: _rng.nextDouble() * math.pi * 2,
+        ),
+      );
+    }
+
+    // Khởi tạo quần thể sinh vật (Màn 2 nhiều Thợ săn & Quái vật lớn hơn!)
+    final int targetEntities = map == _GameStageMap.coralBay ? 66 : 74;
+    while (_entities.length < targetEntities) {
       _spawnRandomEntityOrSchool(avoidPlayer: true);
     }
 
-    for (int i = 0; i < 16; i++) {
+    // Khởi tạo vật phẩm & Thủy lôi (Màn 2 nhiều thủy lôi hơn)
+    final int pickupCount = map == _GameStageMap.coralBay ? 15 : 22;
+    for (int i = 0; i < pickupCount; i++) {
       _spawnRandomPickup();
     }
   }
 
+  void _switchGameMap(_GameStageMap targetMap) {
+    if (_currentMap == targetMap) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _initOceanWorld(map: targetMap, preserveProgress: true);
+      final bool isVi = AppStrings.of(context).languageCode == 'vi';
+      _bannerAnnouncement = targetMap == _GameStageMap.volcanicAbyss
+          ? (isVi
+              ? 'MÀN 2: RÃNH MARIANA & HỎA NGỤC DUNG NHAM (x1.6 ĐIỂM!)'
+              : 'STAGE 2: MARIANA VOLCANIC ABYSS (x1.6 SCORE!)')
+          : (isVi
+              ? 'MÀN 1: VỊNH SAN HÔ & THUYỀN ĐÁNH CÁ MẶT BIỂN'
+              : 'STAGE 1: CORAL BAY & FISHING BOATS');
+      _bannerTimer = 3.2;
+    });
+  }
+
   void _spawnRandomEntityOrSchool({bool avoidPlayer = false}) {
+    final bool isMap2 = _currentMap == _GameStageMap.volcanicAbyss;
     final double roll = _rng.nextDouble();
     int targetTier;
-    if (roll < 0.45) {
-      targetTier = 1;
-    } else if (roll < 0.72) {
-      targetTier = 2;
-    } else if (roll < 0.86) {
-      targetTier = 3;
-    } else if (roll < 0.94) {
-      targetTier = 4;
-    } else if (roll < 0.985) {
-      targetTier = 5;
+
+    if (isMap2) {
+      // Màn 2 khó hơn: xuất hiện đầy đủ từ Tier 1 đến Siêu Boss Tier 7-11
+      if (roll < 0.22) {
+        targetTier = 1;
+      } else if (roll < 0.42) {
+        targetTier = 2;
+      } else if (roll < 0.58) {
+        targetTier = 3;
+      } else if (roll < 0.71) {
+        targetTier = 4;
+      } else if (roll < 0.81) {
+        targetTier = 5;
+      } else if (roll < 0.88) {
+        targetTier = 6;
+      } else if (roll < 0.93) {
+        targetTier = 7;
+      } else if (roll < 0.96) {
+        targetTier = 8;
+      } else if (roll < 0.982) {
+        targetTier = 9;
+      } else if (roll < 0.994) {
+        targetTier = 10;
+      } else {
+        targetTier = 11;
+      }
     } else {
-      targetTier = 6;
+      if (roll < 0.40) {
+        targetTier = 1;
+      } else if (roll < 0.65) {
+        targetTier = 2;
+      } else if (roll < 0.79) {
+        targetTier = 3;
+      } else if (roll < 0.89) {
+        targetTier = 4;
+      } else if (roll < 0.95) {
+        targetTier = 5;
+      } else if (roll < 0.98) {
+        targetTier = 6;
+      } else {
+        targetTier = 7;
+      }
     }
 
     final candidates =
@@ -1105,10 +1483,12 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     final template = candidates[_rng.nextInt(candidates.length)];
 
     double baseX = 120.0 + _rng.nextDouble() * (worldWidth - 240.0);
-    double baseY = (template.minDepthRatio +
-            _rng.nextDouble() *
-                (template.maxDepthRatio - template.minDepthRatio)) *
-        worldHeight;
+    double minY = math.max(
+        seaSurfaceY + 18.0, template.minDepthRatio * worldHeight);
+    double maxY =
+        math.min(worldHeight - 85.0, template.maxDepthRatio * worldHeight);
+    if (maxY <= minY) maxY = minY + 40.0;
+    double baseY = minY + _rng.nextDouble() * (maxY - minY);
 
     if (avoidPlayer) {
       final double dx = baseX - _playerX;
@@ -1120,7 +1500,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     }
 
     final double dir = _rng.nextBool() ? 1.0 : -1.0;
-    final double baseVx = dir * template.speed * (0.8 + _rng.nextDouble() * 0.35);
+    final double mapSpeedMult = isMap2 ? 1.15 : 1.0;
+    final double baseVx =
+        dir * template.speed * mapSpeedMult * (0.8 + _rng.nextDouble() * 0.35);
     final double baseVy = (_rng.nextDouble() - 0.5) * template.speed * 0.25;
     final int groupId = _nextSchoolGroupId++;
     final int count = template.schoolSize > 1
@@ -1135,7 +1517,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
           template: template,
           schoolGroupId: groupId,
           x: (baseX + ox).clamp(80.0, worldWidth - 80.0),
-          y: (baseY + oy).clamp(75.0, worldHeight - 85.0),
+          y: (baseY + oy).clamp(seaSurfaceY + 12.0, worldHeight - 85.0),
           vx: baseVx * (0.92 + _rng.nextDouble() * 0.16),
           vy: baseVy,
           swimPhase: _rng.nextDouble() * math.pi * 2,
@@ -1145,22 +1527,24 @@ class _SharkGameScreenState extends State<SharkGameScreen>
   }
 
   void _spawnRandomPickup() {
+    final bool isMap2 = _currentMap == _GameStageMap.volcanicAbyss;
     final double r = _rng.nextDouble();
     final _PickupType type;
-    double minY = 120.0;
+    double minY = seaSurfaceY + 60.0;
     double maxY = worldHeight - 120.0;
     double radius = 16.0;
 
-    if (r < 0.45) {
+    // Giảm tỷ lệ ngọc hồi máu, tăng tỷ lệ thủy lôi để game thử thách hơn!
+    if (r < (isMap2 ? 0.22 : 0.30)) {
       type = _PickupType.healingPearl;
       radius = 15.0;
-    } else if (r < 0.72) {
+    } else if (r < 0.52) {
       type = _PickupType.goldenStar;
       radius = 16.0;
     } else {
       type = _PickupType.navalMine;
-      minY = 380.0;
-      radius = 24.0;
+      minY = seaSurfaceY + 180.0;
+      radius = 25.0;
     }
 
     _pickups.add(
@@ -1202,7 +1586,12 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     }
   }
 
-  /// Cập nhật Động Học Chuỗi Xương Sống 16 Đốt (Follow-the-Leader Spine Kinematics)
+  void _triggerScreenShake(double intensity, double duration) {
+    // Giới hạn rung màn hình êm dịu (tối đa 4.5px và 0.16s) để không gây mỏi mắt hay khó chịu
+    _screenShakeIntensity = math.max(_screenShakeIntensity, math.min(intensity, 4.5));
+    _screenShakeTimer = math.max(_screenShakeTimer, math.min(duration, 0.16));
+  }
+
   void _updateSpineChain({
     required List<Offset> spine,
     required double centerX,
@@ -1216,17 +1605,13 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     final double cosH = math.cos(headingAngle);
     final double sinH = math.sin(headingAngle);
 
-    // Đốt 0 (Mõm/Đầu) dẫn đường ở phía trước trọng tâm
     final Offset targetHead = Offset(
       centerX + cosH * (bodyLength * 0.44),
       centerY + sinH * (bodyLength * 0.44),
     );
     spine[0] = targetHead;
 
-    // Hướng chuẩn từ đầu về đuôi là (-cosH, -sinH)
     final double idealBackAngle = headingAngle + math.pi;
-
-    // Các đốt 1..15 bám theo đốt phía trước với giới hạn độ uốn cong tự nhiên (max 14 độ/đốt)
     double prevSegAngle = idealBackAngle;
     for (int i = 1; i < n; i++) {
       final Offset prev = spine[i - 1];
@@ -1238,13 +1623,12 @@ class _SharkGameScreenState extends State<SharkGameScreen>
           ? prevSegAngle
           : math.atan2(dy, dx);
 
-      // Kéo nhẹ góc đốt sống về hướng thân để cá duỗi thẳng mượt sau khi rẽ
       final double diffToIdeal = _normalizeAngle(idealBackAngle - segAngle);
-      segAngle += diffToIdeal * (dt * (4.2 + (1.0 - i / n) * 4.5)).clamp(0.0, 0.45);
+      segAngle +=
+          diffToIdeal * (dt * (4.2 + (1.0 - i / n) * 4.5)).clamp(0.0, 0.45);
 
-      // Giới hạn góc gập giữa 2 đốt liên tiếp để cơ thể luôn uốn cong tròn trịa (không gãy khúc)
       final double bendFromPrev = _normalizeAngle(segAngle - prevSegAngle);
-      const double maxBendPerJoint = 0.24; // ~13.7 độ
+      const double maxBendPerJoint = 0.24;
       if (bendFromPrev.abs() > maxBendPerJoint) {
         segAngle = prevSegAngle + maxBendPerJoint * bendFromPrev.sign;
       }
@@ -1269,8 +1653,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   void _updateGameWorld(double dt) {
     final stage = _currentStage;
+    final bool isMap2 = _currentMap == _GameStageMap.volcanicAbyss;
 
-    // 1. Giảm dần các bộ đếm
+    // 1. Timers & Screen Shake
+    if (_screenShakeTimer > 0) {
+      _screenShakeTimer = math.max(0.0, _screenShakeTimer - dt);
+      if (_screenShakeTimer <= 0) _screenShakeIntensity = 0.0;
+    }
+    _lowHpPulsePhase += dt * 7.5;
     if (_biteAnimTimer > 0) _biteAnimTimer = math.max(0.0, _biteAnimTimer - dt);
     if (_biteCooldown > 0) _biteCooldown = math.max(0.0, _biteCooldown - dt);
     if (_vortexTimer > 0) _vortexTimer = math.max(0.0, _vortexTimer - dt);
@@ -1297,51 +1687,100 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       }
     }
 
-    // 2. Xử lý Stamina & HP
+    // 2. Cân bằng Độ Đói (Hunger Drain) & Thể lực (Stamina) thách thức hơn!
     final bool frenzyActive = _frenzyTimer > 0;
     final bool canBoost = _isBoosting && (_stamina > 2.0 || frenzyActive);
     if (canBoost && !frenzyActive) {
-      _stamina = math.max(0.0, _stamina - 28.0 * dt);
+      _stamina = math.max(0.0, _stamina - 36.0 * dt);
       if (_stamina <= 0.5) {
         _isBoosting = false;
       }
     } else {
-      _stamina = math.min(100.0, _stamina + 16.0 * dt);
+      _stamina = math.min(100.0, _stamina + 13.5 * dt);
     }
 
     if (!frenzyActive) {
-      _hp = math.max(0.0, _hp - (1.05 + _stageIndex * 0.22) * dt);
+      final double hungerRate =
+          (2.85 + _stageIndex * 0.65) * (isMap2 ? 1.38 : 1.0);
+      _hp = math.max(0.0, _hp - hungerRate * dt);
       if (_hp <= 0.0) {
         _triggerGameOver();
         return;
       }
     } else {
-      _hp = math.min(stage.maxHp, _hp + 14.0 * dt);
+      _hp = math.min(stage.maxHp, _hp + 8.0 * dt);
     }
 
-    // 3. Vật lý bơi có quán tính nước & nhịp đẩy vây đuôi của Cá Mập Người Chơi
-    double maxSpeed = 245.0 + _stageIndex * 18.0;
-    if (canBoost) maxSpeed *= 1.85;
+    // 3. Vật lý Cá Mập Người Chơi (Hỗ trợ Nhảy Vượt Mặt Biển - Airborne Breach!)
+    final bool isAirborne = _playerY < seaSurfaceY;
+    double maxSpeed = 250.0 + _stageIndex * 18.0;
+    if (canBoost) maxSpeed *= 1.92;
     if (frenzyActive) maxSpeed *= 1.35;
     if (_biteAnimTimer > 0.12) maxSpeed *= 1.48;
 
-    final double inputMag = _joystickDelta.distance.clamp(0.0, 1.0);
-    if (inputMag > 0.04) {
-      // Nhịp đẩy cơ học từ cú quẫy đuôi
-      final double tailThrust = 1.0 + 0.08 * math.cos(_playerSwimPhase * 2.0);
-      final double targetVx = _joystickDelta.dx * maxSpeed * tailThrust;
-      final double targetVy = _joystickDelta.dy * maxSpeed * tailThrust;
-      _playerVx = ui.lerpDouble(_playerVx, targetVx, (dt * 7.5).clamp(0.0, 1.0))!;
-      _playerVy = ui.lerpDouble(_playerVy, targetVy, (dt * 7.5).clamp(0.0, 1.0))!;
+    if (isAirborne) {
+      // Trên không trung (nhảy vượt sóng lên húc thuyền!): Trọng lực kéo cá rơi xuống biển
+      _playerVy += 580.0 * dt;
+      _playerVx += _joystickDelta.dx * 160.0 * dt;
+      _playerVx *= math.pow(0.85, dt).toDouble();
     } else {
-      // Khi nhả tay khỏi Joystick: Cá mập lướt êm theo quán tính nước (Water Glide)
-      final double waterDrag = math.pow(0.18, dt).toDouble();
-      _playerVx *= waterDrag;
-      _playerVy *= waterDrag;
+      final double inputMag = _joystickDelta.distance.clamp(0.0, 1.0);
+      if (inputMag > 0.04) {
+        final double tailThrust = 1.0 + 0.08 * math.cos(_playerSwimPhase * 2.0);
+        final double targetVx = _joystickDelta.dx * maxSpeed * tailThrust;
+        final double targetVy = _joystickDelta.dy * maxSpeed * tailThrust;
+        _playerVx =
+            ui.lerpDouble(_playerVx, targetVx, (dt * 7.5).clamp(0.0, 1.0))!;
+        _playerVy =
+            ui.lerpDouble(_playerVy, targetVy, (dt * 7.5).clamp(0.0, 1.0))!;
+      } else {
+        final double waterDrag = math.pow(0.18, dt).toDouble();
+        _playerVx *= waterDrag;
+        _playerVy *= waterDrag;
+      }
     }
 
     _playerX = (_playerX + _playerVx * dt).clamp(70.0, worldWidth - 70.0);
-    _playerY = (_playerY + _playerVy * dt).clamp(65.0, worldHeight - 75.0);
+    _playerY = (_playerY + _playerVy * dt).clamp(35.0, worldHeight - 75.0);
+
+    // Hiệu ứng Bọt Nước Bắn Tung Tóe khi Cá Mập vọt lên mặt biển hoặc rơi xuống nước!
+    final bool nowAirborne = _playerY < seaSurfaceY;
+    if (nowAirborne != _wasAirborne) {
+      _wasAirborne = nowAirborne;
+      _spawnBloodAndBubbles(
+        _playerX,
+        seaSurfaceY,
+        const Color(0xFFE0F7FA),
+        count: 18,
+      );
+      HapticFeedback.lightImpact();
+    }
+
+    // Màn 2: Mạch nước phun nhiệt núi lửa dưới đáy biển gây bỏng nếu chạm phải!
+    if (isMap2 && _playerY > worldHeight - 115.0 && !frenzyActive) {
+      for (double vx = 380.0; vx < worldWidth; vx += 650.0) {
+        if ((_playerX - vx).abs() < 46.0 && _invulnerableTimer <= 0) {
+          _hp = math.max(0.0, _hp - 18.0);
+          _invulnerableTimer = 0.7;
+          _playerVy = -260.0;
+          _triggerScreenShake(7.0, 0.25);
+          _popups.add(
+            _FloatingTextPopup(
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? 'BỎNG DUNG NHAM! -18 HP'
+                  : 'LAVA BURN! -18 HP',
+              x: _playerX,
+              y: _playerY - 40.0,
+              color: const Color(0xFFFF3D00),
+            ),
+          );
+          if (_hp <= 0) {
+            _triggerGameOver();
+            return;
+          }
+        }
+      }
+    }
 
     final double currentSpeed =
         math.sqrt(_playerVx * _playerVx + _playerVy * _playerVy);
@@ -1351,7 +1790,6 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       _playerFacingRight = _playerVx > 0;
     }
 
-    // Chuyển tiếp mượt hướng vây lưng (Smooth 3D Yaw Turn trong ~0.18s)
     final double targetDorsal = _playerFacingRight ? 1.0 : -1.0;
     _playerDorsalFlip = ui.lerpDouble(
       _playerDorsalFlip,
@@ -1359,30 +1797,30 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       (dt * 9.5).clamp(0.0, 1.0),
     )!;
 
-    // Tính góc hướng đầu mượt mà
     double desiredAngle;
     if (currentSpeed > 14.0) {
       desiredAngle = math.atan2(_playerVy, _playerVx);
-      // Giới hạn độ chúc đầu lên/xuống để cá mập nhìn tự nhiên
-      if (_playerFacingRight) {
-        desiredAngle = desiredAngle.clamp(-0.68, 0.68);
-      } else {
-        double diff = _normalizeAngle(desiredAngle - math.pi);
-        diff = diff.clamp(-0.68, 0.68);
-        desiredAngle = _normalizeAngle(math.pi + diff);
+      if (!isAirborne) {
+        if (_playerFacingRight) {
+          desiredAngle = desiredAngle.clamp(-0.78, 0.78);
+        } else {
+          double diff = _normalizeAngle(desiredAngle - math.pi);
+          diff = diff.clamp(-0.78, 0.78);
+          desiredAngle = _normalizeAngle(math.pi + diff);
+        }
       }
     } else {
       desiredAngle = _playerFacingRight ? 0.0 : math.pi;
     }
-    final double angleDelta = _normalizeAngle(desiredAngle - _playerHeadingAngle);
-    _playerHeadingAngle =
-        _normalizeAngle(_playerHeadingAngle + angleDelta * (dt * 10.5).clamp(0.0, 1.0));
+    final double angleDelta =
+        _normalizeAngle(desiredAngle - _playerHeadingAngle);
+    _playerHeadingAngle = _normalizeAngle(
+        _playerHeadingAngle + angleDelta * (dt * 10.5).clamp(0.0, 1.0));
 
     final double effectivePlayerRadius =
         stage.baseRadius * (frenzyActive ? 1.25 : 1.0);
     final double playerBodyLen = effectivePlayerRadius * 2.75;
 
-    // Cập nhật 16 đốt xương sống của Cá Mập Người Chơi
     _updateSpineChain(
       spine: _playerSpine,
       centerX: _playerX,
@@ -1392,8 +1830,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       dt: dt,
     );
 
-    // Tạo bọt khí từ chóp đuôi (_playerSpine.last) khi lướt nhanh
-    if ((canBoost || frenzyActive) && _rng.nextDouble() < 0.7) {
+    if ((canBoost || frenzyActive) && !isAirborne && _rng.nextDouble() < 0.7) {
       final Offset tailTip = _playerSpine.last;
       _particles.add(
         _GameParticle(
@@ -1411,24 +1848,187 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       );
     }
 
-    // Vị trí Miệng Cá Mập Người Chơi (Giữa đốt 0 và đốt 1)
     final Offset playerMouth = Offset(
       (_playerSpine[0].dx + _playerSpine[1].dx) * 0.5,
       (_playerSpine[0].dy + _playerSpine[1].dy) * 0.5,
     );
 
-    // 4. Cập nhật AI Sinh Vật, Bơi Đàn (Schooling), Uốn Xương Sống 16 Đốt & Hút Mồi Vào Miệng
+    // 4. Cập nhật THUYỀN ĐÁNH CÁ & BÈ GỖ TRÊN MẶT BIỂN (Bắn lao & Húc vỡ thuyền!)
+    for (final v in _vessels) {
+      v.bobPhase += dt * 2.6;
+      if (v.hitFlashTimer > 0) v.hitFlashTimer = math.max(0.0, v.hitFlashTimer - dt);
+
+      if (v.isDestroyed) {
+        v.respawnTimer -= dt;
+        if (v.respawnTimer <= 0) {
+          v.isDestroyed = false;
+          v.hp = v.maxHp;
+          v.passengersCount = v.isFishingBoat ? 3 : 2;
+          v.x = (_playerX + 1200.0) % (worldWidth - 400.0) + 200.0;
+        }
+        continue;
+      }
+
+      v.x += v.vx * dt;
+      if (v.x < 180.0) {
+        v.x = 180.0;
+        v.vx = v.vx.abs();
+      } else if (v.x > worldWidth - 180.0) {
+        v.x = worldWidth - 180.0;
+        v.vx = -v.vx.abs();
+      }
+
+      final double vesselY = seaSurfaceY - v.height * 0.12 + math.sin(v.bobPhase) * 5.0;
+      final double dxV = _playerX - v.x;
+      final double dyV = _playerY - vesselY;
+      final double distV = math.sqrt(dxV * dxV + dyV * dyV);
+
+      // Thợ săn trên thuyền bắn mũi lao xuống nếu cá mập bơi gần mặt biển!
+      v.shootCooldown -= dt;
+      if (v.shootCooldown <= 0 && distV < 430.0 && _playerY > seaSurfaceY - 40.0) {
+        v.shootCooldown = (v.isFishingBoat ? 2.2 : 3.0) * (isMap2 ? 0.8 : 1.0);
+        final double d = math.max(1.0, distV);
+        _harpoons.add(
+          _HarpoonProjectile(
+            x: v.x,
+            y: vesselY + 10.0,
+            vx: (dxV / d) * 340.0,
+            vy: (dyV / d) * 340.0,
+            damage: v.isFishingBoat ? 18.0 : 12.0,
+          ),
+        );
+      }
+
+      // Va chạm giữa Cá Mập và Thuyền / Bè (Phi lên thuyền cắn phá!)
+      if (dxV.abs() < v.width * 0.45 + effectivePlayerRadius * 0.7 &&
+          dyV.abs() < v.height * 0.42 + effectivePlayerRadius * 0.7) {
+        final bool canSmashBoat = stage.level >= 3 || frenzyActive;
+        if (canSmashBoat) {
+          final double hitDmg =
+              frenzyActive ? 999.0 : stage.biteDamage * (_biteAnimTimer > 0 ? 1.8 : 1.1);
+          v.hp -= hitDmg;
+          v.hitFlashTimer = 0.18;
+          _triggerScreenShake(3.0, 0.12);
+          _spawnBloodAndBubbles(v.x, seaSurfaceY, const Color(0xFFFF9100), count: 7);
+
+          if (v.hp <= 0) {
+            // HÚC VỠ THUYỀN & HẤT TUNG NGƯỜI XUỐNG BIỂN ĐỂ ĂN THỊT!
+            v.isDestroyed = true;
+            v.respawnTimer = 22.0;
+            _score += v.isFishingBoat ? 650 : 400;
+            _gainExp(v.isFishingBoat ? 95 : 65);
+            _triggerScreenShake(4.5, 0.16);
+            HapticFeedback.mediumImpact();
+            _popups.add(
+              _FloatingTextPopup(
+                text: v.isFishingBoat
+                    ? (AppStrings.of(context).languageCode == 'vi'
+                        ? 'ĐÁNH ĐẮM THUYỀN! +650'
+                        : 'BOAT SMASHED! +650')
+                    : (AppStrings.of(context).languageCode == 'vi'
+                        ? 'PHÁ VỠ BÈ GỖ! +400'
+                        : 'RAFT DESTROYED! +400'),
+                x: v.x,
+                y: seaSurfaceY - 60.0,
+                color: const Color(0xFFFFEA00),
+                fontSize: 15.0,
+              ),
+            );
+
+            // Rơi người xuống biển làm mồi ngon cho cá mập!
+            final swimmerTpl =
+                _speciesCatalog.firstWhere((c) => c.id == 'surface_swimmer');
+            for (int p = 0; p < v.passengersCount; p++) {
+              _entities.add(
+                _SeaEntity(
+                  template: swimmerTpl,
+                  schoolGroupId: _nextSchoolGroupId++,
+                  x: (v.x + (p - 1) * 55.0).clamp(80.0, worldWidth - 80.0),
+                  y: seaSurfaceY + 26.0,
+                  vx: (p - 1) * 75.0,
+                  vy: 45.0,
+                  swimPhase: _rng.nextDouble() * math.pi,
+                ),
+              );
+            }
+          }
+        } else if (_invulnerableTimer <= 0) {
+          // Cá nhỏ LV.1 - LV.2 húc vào thân thuyền sắt bị dội ngược & mất máu
+          _invulnerableTimer = 0.7;
+          _hp = math.max(0.0, _hp - 12.0);
+          _playerVy = 210.0;
+          _triggerScreenShake(5.0, 0.2);
+          _popups.add(
+            _FloatingTextPopup(
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? 'THUYỀN QUÁ CỨNG! CẦN LV.3+'
+                  : 'ARMORED HULL! NEED LV.3+',
+              x: _playerX,
+              y: _playerY - 30.0,
+              color: const Color(0xFFFF5252),
+              fontSize: 12.5,
+            ),
+          );
+        }
+      }
+    }
+
+    // 5. Cập nhật MŨI LAO (Harpoons) bắn từ Thuyền & Thợ săn
+    for (int i = _harpoons.length - 1; i >= 0; i--) {
+      final h = _harpoons[i];
+      h.lifeTimer -= dt;
+      h.x += h.vx * dt;
+      h.y += h.vy * dt;
+      if (h.lifeTimer <= 0 ||
+          h.x < 0 ||
+          h.x > worldWidth ||
+          h.y < 0 ||
+          h.y > worldHeight) {
+        _harpoons.removeAt(i);
+        continue;
+      }
+
+      final double dx = h.x - _playerX;
+      final double dy = h.y - _playerY;
+      if (dx * dx + dy * dy <
+          (effectivePlayerRadius * 0.75) * (effectivePlayerRadius * 0.75)) {
+        if (!frenzyActive && _invulnerableTimer <= 0) {
+          _hp = math.max(0.0, _hp - h.damage);
+          _invulnerableTimer = 0.55;
+          _triggerScreenShake(7.5, 0.22);
+          HapticFeedback.heavyImpact();
+          _spawnBloodAndBubbles(h.x, h.y, const Color(0xFFFF1744), count: 10);
+          _popups.add(
+            _FloatingTextPopup(
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? 'TRÚNG LAO! -${h.damage.toInt()} HP'
+                  : 'HARPOON HIT! -${h.damage.toInt()} HP',
+              x: _playerX,
+              y: _playerY - 30.0,
+              color: const Color(0xFFFF1744),
+            ),
+          );
+          if (_hp <= 0.0) {
+            _triggerGameOver();
+            return;
+          }
+        }
+        _harpoons.removeAt(i);
+      }
+    }
+
+    // 6. Cập nhật AI Sinh Vật, Người Bơi chạy lên thuyền & Va chạm
     for (int i = _entities.length - 1; i >= 0; i--) {
       final e = _entities[i];
 
-      // Nếu con mồi đang trong pha bị Hút Xoắn Vào Miệng Cá Mập (Swallow Animation)
       if (e.isBeingSwallowed) {
-        e.swallowProgress += dt * 6.8; // ~0.15 giây
+        e.swallowProgress += dt * 6.8;
         e.x = ui.lerpDouble(e.x, playerMouth.dx, (dt * 18.0).clamp(0.0, 1.0))!;
         e.y = ui.lerpDouble(e.y, playerMouth.dy, (dt * 18.0).clamp(0.0, 1.0))!;
         e.swimPhase += dt * 16.0;
-        final double shrinkLen =
-            e.template.radius * 2.55 * (1.0 - e.swallowProgress * 0.78).clamp(0.15, 1.0);
+        final double shrinkLen = e.template.radius *
+            2.55 *
+            (1.0 - e.swallowProgress * 0.78).clamp(0.15, 1.0);
         final double swallowAngle =
             math.atan2(playerMouth.dy - e.y, playerMouth.dx - e.x);
         _updateSpineChain(
@@ -1458,16 +2058,17 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         e.y += e.vy * 0.12 * dt;
       } else {
         final double speedMag = math.sqrt(e.vx * e.vx + e.vy * e.vy);
-        e.swimPhase +=
-            dt * (e.template.waveFrequency + speedMag * 0.025);
+        e.swimPhase += dt * (e.template.waveFrequency + speedMag * 0.025);
         e.aiChangeTimer -= dt;
 
         final double dxToPlayer = _playerX - e.x;
         final double dyToPlayer = _playerY - e.y;
-        final double dist = math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+        final double dist =
+            math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
 
         final bool canBeSucked =
             e.template.tier <= stage.level || frenzyActive;
+
         if (_vortexTimer > 0 && canBeSucked && dist < 400.0 && dist > 1.0) {
           final double pullDx = playerMouth.dx - e.x;
           final double pullDy = playerMouth.dy - e.y;
@@ -1477,19 +2078,85 @@ class _SharkGameScreenState extends State<SharkGameScreen>
               e.vx, (pullDx / pullDist) * 340.0, (dt * 8.0).clamp(0.0, 1.0))!;
           e.vy = ui.lerpDouble(
               e.vy, (pullDy / pullDist) * 340.0, (dt * 8.0).clamp(0.0, 1.0))!;
-        } else if (dist < 330.0) {
+        } else if (e.template.id == 'surface_swimmer') {
+          // AI NGƯỜI BƠI: Thấy cá mập đến gần -> Hoảng loạn bơi chạy về phía Thuyền/Bè gần nhất để leo lên!
+          e.isPanicking = dist < 360.0;
+          if (e.isPanicking) {
+            _SurfaceVessel? nearestBoat;
+            double bestBoatDist = 999999.0;
+            for (final v in _vessels) {
+              if (v.isDestroyed) continue;
+              final double bd = (v.x - e.x).abs();
+              if (bd < bestBoatDist) {
+                bestBoatDist = bd;
+                nearestBoat = v;
+              }
+            }
+            if (nearestBoat != null) {
+              final double dirToBoat = nearestBoat.x >= e.x ? 1.0 : -1.0;
+              e.vx = ui.lerpDouble(
+                  e.vx, dirToBoat * 135.0, (dt * 6.0).clamp(0.0, 1.0))!;
+              e.vy = ui.lerpDouble(
+                  e.vy,
+                  (seaSurfaceY + 18.0 - e.y) * 2.5,
+                  (dt * 6.0).clamp(0.0, 1.0))!;
+              // Nếu bơi tới sát thuyền -> Leo lên thuyền an toàn!
+              if ((nearestBoat.x - e.x).abs() < nearestBoat.width * 0.35 &&
+                  (e.y - seaSurfaceY).abs() < 36.0) {
+                nearestBoat.passengersCount++;
+                _popups.add(
+                  _FloatingTextPopup(
+                    text: AppStrings.of(context).languageCode == 'vi'
+                        ? 'TRỐN LÊN THUYỀN!'
+                        : 'ESCAPED TO BOAT!',
+                    x: e.x,
+                    y: seaSurfaceY - 25.0,
+                    color: const Color(0xFFFFD740),
+                    fontSize: 11.5,
+                  ),
+                );
+                _entities.removeAt(i);
+                continue;
+              }
+            } else if (dist > 1.0) {
+              e.vx = -(dxToPlayer / dist) * 125.0;
+            }
+          }
+        } else if (e.template.isHarpoonHunter && dist < 440.0) {
+          // THỢ SĂN DƯỚI NƯỚC: Bắn lao vào cá mập hoặc giữ khoảng cách
+          e.shootCooldown -= dt;
+          if (e.shootCooldown <= 0 && dist > 90.0) {
+            e.shootCooldown = isMap2 ? 2.1 : 2.7;
+            _harpoons.add(
+              _HarpoonProjectile(
+                x: e.x,
+                y: e.y,
+                vx: (dxToPlayer / dist) * 310.0,
+                vy: (dyToPlayer / dist) * 310.0,
+                damage: 16.0,
+              ),
+            );
+          }
+          if (dist < 220.0 && dist > 1.0) {
+            e.vx = -(dxToPlayer / dist) * e.template.speed * 1.2;
+            e.vy = -(dyToPlayer / dist) * e.template.speed * 1.1;
+          }
+        } else if (dist < 350.0) {
           if (e.template.tier < stage.level || frenzyActive) {
-            // Cá nhỏ hơn: Quẫy đuôi chạy trốn mềm mại khi cá mập lao tới!
-            if (dist < 245.0 && dist > 1.0) {
-              final double fleeVx = -(dxToPlayer / dist) * e.template.speed * 1.42;
-              final double fleeVy = -(dyToPlayer / dist) * e.template.speed * 1.15;
+            if (dist < 250.0 && dist > 1.0) {
+              final double fleeVx =
+                  -(dxToPlayer / dist) * e.template.speed * 1.45;
+              final double fleeVy =
+                  -(dyToPlayer / dist) * e.template.speed * 1.18;
               e.vx = ui.lerpDouble(e.vx, fleeVx, (dt * 5.5).clamp(0.0, 1.0))!;
               e.vy = ui.lerpDouble(e.vy, fleeVy, (dt * 5.5).clamp(0.0, 1.0))!;
             }
           } else if (e.template.tier > stage.level && e.template.isAggressive) {
             if (dist > 1.0) {
-              final double chaseVx = (dxToPlayer / dist) * e.template.speed * 1.18;
-              final double chaseVy = (dyToPlayer / dist) * e.template.speed * 1.05;
+              final double chaseVx =
+                  (dxToPlayer / dist) * e.template.speed * (isMap2 ? 1.28 : 1.18);
+              final double chaseVy =
+                  (dyToPlayer / dist) * e.template.speed * (isMap2 ? 1.15 : 1.05);
               e.vx = ui.lerpDouble(e.vx, chaseVx, (dt * 4.5).clamp(0.0, 1.0))!;
               e.vy = ui.lerpDouble(e.vy, chaseVy, (dt * 4.5).clamp(0.0, 1.0))!;
             }
@@ -1497,22 +2164,18 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         } else if (e.aiChangeTimer <= 0) {
           e.aiChangeTimer = 2.2 + _rng.nextDouble() * 3.6;
           final double dir = _rng.nextBool() ? 1.0 : -1.0;
-          final double targetVx =
-              dir * e.template.speed * (0.8 + _rng.nextDouble() * 0.4);
-          final double targetVy =
-              (_rng.nextDouble() - 0.5) * e.template.speed * 0.42;
-          e.vx = targetVx;
-          e.vy = targetVy;
+          e.vx = dir * e.template.speed * (0.8 + _rng.nextDouble() * 0.4);
+          e.vy = (_rng.nextDouble() - 0.5) * e.template.speed * 0.42;
         }
 
-        // Nhịp lượn sin tự nhiên khi bơi tuần tra
         e.vy += math.cos(e.swimPhase * 0.4) * 14.0 * dt;
-
         e.x += e.vx * dt;
         e.y += e.vy * dt;
 
-        final double minY = e.template.minDepthRatio * worldHeight;
-        final double maxY = e.template.maxDepthRatio * worldHeight;
+        final double minY = math.max(
+            seaSurfaceY + 14.0, e.template.minDepthRatio * worldHeight);
+        final double maxY =
+            math.min(worldHeight - 80.0, e.template.maxDepthRatio * worldHeight);
         if (e.y < minY) {
           e.y = minY;
           e.vy = e.vy.abs();
@@ -1534,7 +2197,6 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         }
       }
 
-      // Cập nhật lật hướng 3D mượt & Chuỗi Xương Sống 16 Đốt cho từng sinh vật
       final double targetEntityDorsal = e.facingRight ? 1.0 : -1.0;
       e.dorsalFlip = ui.lerpDouble(
         e.dorsalFlip,
@@ -1546,7 +2208,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       if (e.facingRight) {
         entityHeading = entityHeading.clamp(-0.55, 0.55);
       } else {
-        final double diff = _normalizeAngle(entityHeading - math.pi).clamp(-0.55, 0.55);
+        final double diff =
+            _normalizeAngle(entityHeading - math.pi).clamp(-0.55, 0.55);
         entityHeading = _normalizeAngle(math.pi + diff);
       }
 
@@ -1559,31 +2222,29 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         dt: dt,
       );
 
-      // Kiểm tra va chạm với Miệng / Thân Cá Mập Người Chơi
       final double dx = e.x - playerMouth.dx;
       final double dy = e.y - playerMouth.dy;
       final double distToMouth = math.sqrt(dx * dx + dy * dy);
       final double dxBody = e.x - _playerX;
       final double dyBody = e.y - _playerY;
       final double distToBody = math.sqrt(dxBody * dxBody + dyBody * dyBody);
-
+      // CHỈ ăn khi đầu/miệng cá mập chạm sát vào con mồi (loại bỏ cảm giác tự hút khi chưa bật kỹ năng Hút Mồi)
       final double eatRadius =
-          effectivePlayerRadius * 0.78 + e.template.radius * 0.78;
+          effectivePlayerRadius * 0.56 + e.template.radius * 0.58;
 
-      if (distToMouth < eatRadius || distToBody < eatRadius * 0.9) {
+      if (distToMouth < eatRadius) {
         final bool isEdibleInstant =
             e.template.tier <= stage.level || frenzyActive;
 
         if (isEdibleInstant) {
           final double damageDealt = frenzyActive
               ? 9999.0
-              : stage.biteDamage * (_biteAnimTimer > 0 ? 1.85 : 1.2);
+              : stage.biteDamage * (_biteAnimTimer > 0 ? 1.85 : 1.15);
           e.hp -= damageDealt;
           e.hitFlashTimer = 0.2;
           _biteAnimTimer = math.max(_biteAnimTimer, 0.24);
 
           if (e.hp <= 0) {
-            // Kích hoạt hiệu ứng Hút Xoắn Vào Miệng Cá Mập!
             e.isBeingSwallowed = true;
             e.swallowProgress = 0.0;
             continue;
@@ -1601,16 +2262,18 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             );
           }
         } else {
-          // Sinh vật CẤP CAO HƠN
           if (_biteAnimTimer > 0 && _isInFrontOfMouth(e.x, e.y)) {
-            final double ripDamage = stage.biteDamage * 0.95;
+            final double ripDamage = stage.biteDamage * 0.9;
             e.hp -= ripDamage;
             e.hitFlashTimer = 0.25;
             _biteAnimTimer = 0.0;
+            _triggerScreenShake(5.5, 0.18);
             _spawnBloodAndBubbles(e.x, e.y, const Color(0xFFFF5252), count: 10);
             _popups.add(
               _FloatingTextPopup(
-                text: 'CẮN XÉ! -${ripDamage.toInt()}',
+                text: AppStrings.of(context).languageCode == 'vi'
+                    ? 'CẮN XÉ! -${ripDamage.toInt()}'
+                    : 'RIP! -${ripDamage.toInt()}',
                 x: e.x,
                 y: e.y - e.template.radius,
                 color: const Color(0xFFFFAB00),
@@ -1632,16 +2295,20 @@ class _SharkGameScreenState extends State<SharkGameScreen>
               continue;
             }
           } else if (_invulnerableTimer <= 0 && e.biteCooldown <= 0) {
-            e.biteCooldown = 1.1;
-            _invulnerableTimer = 0.85;
-            _hp = math.max(0.0, _hp - e.template.damage);
+            e.biteCooldown = 1.05;
+            _invulnerableTimer = 0.75;
+            final double dmg = e.template.damage * (isMap2 ? 1.2 : 1.0);
+            _hp = math.max(0.0, _hp - dmg);
+            _triggerScreenShake(9.5, 0.28);
             HapticFeedback.heavyImpact();
             _spawnBloodAndBubbles(
                 _playerX, _playerY, const Color(0xFFD50000),
                 count: 14);
             _popups.add(
               _FloatingTextPopup(
-                text: '-${e.template.damage.toInt()} MÁU (CÁ LỚN!)',
+                text: AppStrings.of(context).languageCode == 'vi'
+                    ? '-${dmg.toInt()} MÁU (CÁ LỚN!)'
+                    : '-${dmg.toInt()} HP (PREDATOR!)',
                 x: _playerX,
                 y: _playerY - effectivePlayerRadius,
                 color: const Color(0xFFFF1744),
@@ -1649,8 +2316,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
               ),
             );
             if (distToBody > 1.0) {
-              _playerVx = -(dxBody / distToBody) * 260.0;
-              _playerVy = -(dyBody / distToBody) * 260.0;
+              _playerVx = -(dxBody / distToBody) * 270.0;
+              _playerVy = -(dyBody / distToBody) * 270.0;
             }
             if (_hp <= 0.0) {
               _triggerGameOver();
@@ -1661,11 +2328,12 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       }
     }
 
-    while (_entities.length < 68) {
+    final int targetEntities = isMap2 ? 74 : 66;
+    while (_entities.length < targetEntities) {
       _spawnRandomEntityOrSchool(avoidPlayer: true);
     }
 
-    // 5. Cập nhật Vật Phẩm (Pickups)
+    // 7. Cập nhật Pickups
     for (int i = _pickups.length - 1; i >= 0; i--) {
       final p = _pickups[i];
       p.pulsePhase += dt * 4.0;
@@ -1700,19 +2368,23 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             _ShockwaveRing(
               x: p.x,
               y: p.y,
-              maxRadius: 150.0,
+              maxRadius: 160.0,
               color: const Color(0xFFFF3D00),
             ),
           );
-          _spawnBloodAndBubbles(p.x, p.y, const Color(0xFFFF6D00), count: 20);
+          _spawnBloodAndBubbles(p.x, p.y, const Color(0xFFFF6D00), count: 22);
+          _triggerScreenShake(12.0, 0.35);
           HapticFeedback.heavyImpact();
 
           if (!frenzyActive && _invulnerableTimer <= 0) {
-            _hp = math.max(0.0, _hp - 35.0);
-            _invulnerableTimer = 0.9;
+            final double mineDmg = isMap2 ? 75.0 : 58.0; // Bom Thủy Lôi nổ mất máu cực thấm!
+            _hp = math.max(0.0, _hp - mineDmg);
+            _invulnerableTimer = 0.85;
             _popups.add(
               _FloatingTextPopup(
-                text: 'NỔ THỦY LÔI! -35 HP',
+                text: AppStrings.of(context).languageCode == 'vi'
+                    ? 'NỔ THỦY LÔI! -${mineDmg.toInt()} HP'
+                    : 'MINE BLAST! -${mineDmg.toInt()} HP',
                 x: _playerX,
                 y: _playerY - 40.0,
                 color: const Color(0xFFFF3D00),
@@ -1723,7 +2395,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             _score += 150;
             _popups.add(
               _FloatingTextPopup(
-                text: 'PHÁ HỦY THỦY LÔI! +150',
+                text: AppStrings.of(context).languageCode == 'vi'
+                    ? 'PHÁ HỦY THỦY LÔI! +150'
+                    : 'MINE DESTROYED! +150',
                 x: p.x,
                 y: p.y - 30.0,
                 color: const Color(0xFFFFD740),
@@ -1737,14 +2411,16 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             return;
           }
         } else if (p.type == _PickupType.healingPearl) {
-          _hp = math.min(stage.maxHp, _hp + stage.maxHp * 0.35);
-          _stamina = math.min(100.0, _stamina + 45.0);
+          _hp = math.min(stage.maxHp, _hp + stage.maxHp * 0.28);
+          _stamina = math.min(100.0, _stamina + 40.0);
           _score += 120;
           HapticFeedback.lightImpact();
           _spawnBloodAndBubbles(p.x, p.y, const Color(0xFF00E676), count: 10);
           _popups.add(
             _FloatingTextPopup(
-              text: '+35% MÁU & NĂNG LƯỢNG',
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? '+28% MÁU & SP'
+                  : '+28% HP & SP',
               x: p.x,
               y: p.y - 20.0,
               color: const Color(0xFF00E676),
@@ -1754,13 +2430,15 @@ class _SharkGameScreenState extends State<SharkGameScreen>
           _spawnRandomPickup();
         } else if (p.type == _PickupType.goldenStar) {
           _score += 300;
-          _furyCharge = math.min(100.0, _furyCharge + 25.0);
-          _gainExp(35);
+          _furyCharge = math.min(100.0, _furyCharge + 22.0);
+          _gainExp(32);
           HapticFeedback.mediumImpact();
           _spawnBloodAndBubbles(p.x, p.y, const Color(0xFFFFD740), count: 12);
           _popups.add(
             _FloatingTextPopup(
-              text: '+300 ĐIỂM | +25% NỘ',
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? '+300 ĐIỂM | +22% NỘ'
+                  : '+300 SCORE | +22% FURY',
               x: p.x,
               y: p.y - 20.0,
               color: const Color(0xFFFFD740),
@@ -1769,13 +2447,15 @@ class _SharkGameScreenState extends State<SharkGameScreen>
           _pickups.removeAt(i);
           _spawnRandomPickup();
         } else if (p.type == _PickupType.meatChunk) {
-          _hp = math.min(stage.maxHp, _hp + 18.0);
+          _hp = math.min(stage.maxHp, _hp + 14.0);
           _score += 90;
-          _gainExp(22);
+          _gainExp(20);
           HapticFeedback.selectionClick();
           _popups.add(
             _FloatingTextPopup(
-              text: '+22 EXP | +MÁU',
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? '+20 EXP | +14 MÁU'
+                  : '+20 EXP | +14 HP',
               x: p.x,
               y: p.y - 16.0,
               color: const Color(0xFFFF8A80),
@@ -1786,7 +2466,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       }
     }
 
-    // 6. Cập nhật Particles, Popups & Shockwaves
+    // 8. Cập nhật Particles, Popups & Shockwaves
     for (int i = _particles.length - 1; i >= 0; i--) {
       final pt = _particles[i];
       pt.x += pt.vx * dt;
@@ -1825,27 +2505,38 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   void _finalizeConsumePrey(_SeaEntity prey, {required int index}) {
     final stage = _currentStage;
+    final bool isMap2 = _currentMap == _GameStageMap.volcanicAbyss;
     if (index >= 0 && index < _entities.length) {
       _entities.removeAt(index);
     }
     _fishEatenCount++;
 
     _comboCount++;
-    _comboTimer = 3.2;
+    _comboTimer = 2.8; // Cửa sổ giữ Combo chặt hơn (2.8s)
     final int multiplier = _comboCount >= 8
         ? 4
         : (_comboCount >= 5 ? 3 : (_comboCount >= 3 ? 2 : 1));
+    final double mapMult = isMap2 ? 1.6 : 1.0;
 
-    final int gainedScore = prey.template.scoreReward * multiplier;
-    final int gainedExp = prey.template.expReward;
+    final int gainedScore =
+        (prey.template.scoreReward * multiplier * mapMult).round();
+    final int gainedExp = (prey.template.expReward * mapMult).round();
     _score += gainedScore;
     _saveHighScoreIfNeeded();
 
-    _hp = math.min(stage.maxHp, _hp + 10.0 + prey.template.tier * 6.0);
-    _stamina = math.min(100.0, _stamina + 14.0);
+    // Hồi máu khắt khe hơn: ăn cá nhỏ chỉ hồi 4.5 HP, ăn người hồi 18 HP!
+    final double healAmount = prey.template.isHuman
+        ? 18.0
+        : (4.5 + prey.template.tier * 3.8);
+    _hp = math.min(stage.maxHp, _hp + healAmount);
+    _stamina = math.min(100.0, _stamina + 11.0);
     if (_frenzyTimer <= 0) {
       _furyCharge =
-          math.min(100.0, _furyCharge + 6.0 + prey.template.tier * 3.5);
+          math.min(100.0, _furyCharge + 5.0 + prey.template.tier * 3.0);
+    }
+
+    if (prey.template.tier >= 4) {
+      _triggerScreenShake(7.5, 0.24);
     }
 
     HapticFeedback.lightImpact();
@@ -1857,7 +2548,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         text: '+$gainedExp EXP | +$gainedScore$comboSuffix',
         x: prey.x,
         y: prey.y - 18.0,
-        color: multiplier > 1
+        color: _isGoldRushActive
             ? const Color(0xFFFFD740)
             : const Color(0xFF00E676),
         fontSize: multiplier > 1 ? 15.0 : 13.0,
@@ -1877,6 +2568,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       _hp = newStage.maxHp;
       _stamina = 100.0;
       _invulnerableTimer = 2.5;
+      _triggerScreenShake(10.0, 0.35);
 
       HapticFeedback.heavyImpact();
       try {
@@ -1896,9 +2588,16 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
       final bool isVi = AppStrings.of(context).languageCode == 'vi';
       setState(() {
-        _bannerAnnouncement = isVi
-            ? 'TIẾN HÓA CẤP ${newStage.level}: ${newStage.nameVi.toUpperCase()} (${newStage.lengthMeters}m)!'
-            : 'EVOLVED TO LV.${newStage.level}: ${newStage.nameEn.toUpperCase()} (${newStage.lengthMeters}m)!';
+        if (newStage.level == 3 && !_map2UnlockedBannerShown) {
+          _map2UnlockedBannerShown = true;
+          _bannerAnnouncement = isVi
+              ? 'LV.3 ĐẠT ĐƯỢC: CÓ THỂ HÚC VỠ THUYỀN & CHUYỂN MÀN 2!'
+              : 'LV.3 REACHED: SMASH BOATS & STAGE 2 UNLOCKED!';
+        } else {
+          _bannerAnnouncement = isVi
+              ? 'TIẾN HÓA CẤP ${newStage.level}: ${newStage.nameVi.toUpperCase()} (${newStage.lengthMeters}m)!'
+              : 'EVOLVED TO LV.${newStage.level}: ${newStage.nameEn.toUpperCase()} (${newStage.lengthMeters}m)!';
+        }
         _bannerTimer = 3.5;
       });
     }
@@ -1927,7 +2626,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   void _triggerBiteAction() {
     if (_biteCooldown > 0 || _isGameOver || _isPaused) return;
-    _biteCooldown = 0.34;
+    _biteCooldown = 0.42;
     _biteAnimTimer = 0.28;
     HapticFeedback.mediumImpact();
 
@@ -1935,9 +2634,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     final double cosH = math.cos(_playerHeadingAngle);
     final double sinH = math.sin(_playerHeadingAngle);
 
-    // Xung lực vọt đớp mồi theo hướng đầu cá mập
-    _playerVx = cosH * (410.0 + _stageIndex * 26.0);
-    _playerVy = sinH * (410.0 + _stageIndex * 26.0);
+    _playerVx = cosH * (420.0 + _stageIndex * 26.0);
+    _playerVy = sinH * (420.0 + _stageIndex * 26.0);
 
     final Offset mouthPos = _playerSpine[0];
     final double biteRange =
@@ -1965,7 +2663,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             _spawnBloodAndBubbles(e.x, e.y, const Color(0xFFFF1744), count: 10);
             _popups.add(
               _FloatingTextPopup(
-                text: 'ĐỚP! -${(stage.biteDamage * 1.95).toInt()}',
+                text: AppStrings.of(context).languageCode == 'vi'
+                    ? 'ĐỚP! -${(stage.biteDamage * 1.95).toInt()}'
+                    : 'BITE! -${(stage.biteDamage * 1.95).toInt()}',
                 x: e.x,
                 y: e.y - e.template.radius,
                 color: const Color(0xFFFF5252),
@@ -1976,10 +2676,13 @@ class _SharkGameScreenState extends State<SharkGameScreen>
           final double ripDmg = stage.biteDamage * 1.15;
           e.hp -= ripDmg;
           e.hitFlashTimer = 0.25;
+          _triggerScreenShake(5.0, 0.16);
           _spawnBloodAndBubbles(e.x, e.y, const Color(0xFFFF5252), count: 12);
           _popups.add(
             _FloatingTextPopup(
-              text: 'CẮN XÉ! -${ripDmg.toInt()}',
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? 'CẮN XÉ! -${ripDmg.toInt()}'
+                  : 'RIP! -${ripDmg.toInt()}',
               x: e.x,
               y: e.y - e.template.radius,
               color: const Color(0xFFFFAB00),
@@ -2006,8 +2709,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   void _triggerVortexSkill() {
     if (_vortexCooldown > 0 || _isGameOver || _isPaused) return;
-    _vortexTimer = 3.6;
-    _vortexCooldown = 6.5;
+    _vortexTimer = 3.2;
+    _vortexCooldown = 11.0; // Cân bằng thời gian hồi chiêu lâu hơn
     HapticFeedback.mediumImpact();
 
     _shockwaves.add(
@@ -2022,8 +2725,9 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   void _triggerSonarRoarSkill() {
     if (_roarCooldown > 0 || _isGameOver || _isPaused) return;
-    _roarCooldown = 8.0;
+    _roarCooldown = 13.0; // Cân bằng thời gian hồi chiêu lâu hơn
     HapticFeedback.heavyImpact();
+    _triggerScreenShake(6.5, 0.25);
 
     try {
       Provider.of<SoundService>(context, listen: false)
@@ -2056,16 +2760,18 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       final double dy = e.y - _playerY;
       final double dist = math.sqrt(dx * dx + dy * dy);
       if (dist <= roarRadius) {
-        e.stunTimer = 3.5;
+        e.stunTimer = 3.2;
         e.hitFlashTimer = 0.35;
-        e.hp -= _currentStage.biteDamage * 0.75;
+        e.hp -= _currentStage.biteDamage * 0.7;
         if (e.hp <= 0) {
           e.isBeingSwallowed = true;
           e.swallowProgress = 0.0;
         } else {
           _popups.add(
             _FloatingTextPopup(
-              text: 'CHOÁNG!',
+              text: AppStrings.of(context).languageCode == 'vi'
+                  ? 'CHOÁNG!'
+                  : 'STUNNED!',
               x: e.x,
               y: e.y - e.template.radius,
               color: const Color(0xFF00F0FF),
@@ -2105,10 +2811,11 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       return;
     }
     _furyCharge = 0.0;
-    _frenzyTimer = 7.5;
-    _invulnerableTimer = 7.5;
+    _frenzyTimer = 7.0;
+    _invulnerableTimer = 7.0;
     _hp = _currentStage.maxHp;
     _stamina = 100.0;
+    _triggerScreenShake(10.0, 0.35);
     HapticFeedback.heavyImpact();
 
     try {
@@ -2184,40 +2891,86 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             return Stack(
               fit: StackFit.expand,
               children: [
-                // 1. THẾ GIỚI ĐẠI DƯƠNG + LƯỚI XƯƠNG SỐNG 16 ĐỐT (60-120FPS Canvas)
+                // 1. THẾ GIỚI ĐẠI DƯƠNG + THUYỀN BÈ MẶT BIỂN + LƯỚI XƯƠNG SỐNG 16 ĐỐT
                 RepaintBoundary(
                   child: ValueListenableBuilder<int>(
                     valueListenable: _frameNotifier,
                     builder: (context, _, _) {
-                      return CustomPaint(
-                        size: viewportSize,
-                        painter: _SharkWorldCanvasPainter(
-                          playerX: _playerX,
-                          playerY: _playerY,
-                          playerFacingRight: _playerFacingRight,
-                          playerDorsalFlip: _playerDorsalFlip,
-                          playerSwimPhase: _playerSwimPhase,
-                          playerSpine: _playerSpine,
-                          stage: _currentStage,
-                          frenzyActive: _frenzyTimer > 0,
-                          isBoosting: _isBoosting && _stamina > 2.0,
-                          biteAnimTimer: _biteAnimTimer,
-                          vortexTimer: _vortexTimer,
-                          invulnerableTimer: _invulnerableTimer,
-                          entities: _entities,
-                          pickups: _pickups,
-                          particles: _particles,
-                          popups: _popups,
-                          shockwaves: _shockwaves,
-                          loadedMeshes: _loadedMeshes,
-                          isVi: isVi,
+                      final double shakeX = _screenShakeTimer > 0
+                          ? (_rng.nextDouble() - 0.5) * 2.0 * _screenShakeIntensity
+                          : 0.0;
+                      final double shakeY = _screenShakeTimer > 0
+                          ? (_rng.nextDouble() - 0.5) * 2.0 * _screenShakeIntensity
+                          : 0.0;
+                      return Transform.translate(
+                        offset: Offset(shakeX, shakeY),
+                        child: CustomPaint(
+                          size: viewportSize,
+                          painter: _SharkWorldCanvasPainter(
+                            currentMap: _currentMap,
+                            playerX: _playerX,
+                            playerY: _playerY,
+                            playerFacingRight: _playerFacingRight,
+                            playerDorsalFlip: _playerDorsalFlip,
+                            playerSwimPhase: _playerSwimPhase,
+                            playerSpine: _playerSpine,
+                            stage: _currentStage,
+                            frenzyActive: _frenzyTimer > 0,
+                            goldRushActive: _isGoldRushActive,
+                            isBoosting: _isBoosting && _stamina > 2.0,
+                            biteAnimTimer: _biteAnimTimer,
+                            vortexTimer: _vortexTimer,
+                            invulnerableTimer: _invulnerableTimer,
+                            entities: _entities,
+                            vessels: _vessels,
+                            harpoons: _harpoons,
+                            pickups: _pickups,
+                            particles: _particles,
+                            popups: _popups,
+                            shockwaves: _shockwaves,
+                            loadedMeshes: _loadedMeshes,
+                            isVi: isVi,
+                          ),
                         ),
                       );
                     },
                   ),
                 ),
 
-                // 2. VÙNG CHẠM JOYSTICK BÊN TRÁI MÀN HÌNH
+                // 2. HIỆU ỨNG VIỀN ĐỎ CẢNH BÁO MÁU THẤP & CƠN SỐT VÀNG (PSYCHOLOGICAL VIGNETTE)
+                IgnorePointer(
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: _frameNotifier,
+                    builder: (context, _, _) {
+                      final double hpRatio =
+                          (_hp / _currentStage.maxHp).clamp(0.0, 1.0);
+                      if (hpRatio >= 0.30 && !_isGoldRushActive) {
+                        return const SizedBox.shrink();
+                      }
+                      final double pulse =
+                          0.5 + 0.5 * math.sin(_lowHpPulsePhase);
+                      final Color vignetteColor = hpRatio < 0.30
+                          ? const Color(0xFFFF1744)
+                              .withValues(alpha: 0.08 + 0.12 * pulse)
+                          : const Color(0xFFFFD740)
+                              .withValues(alpha: 0.05 + 0.04 * pulse);
+                      return Container(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            radius: 0.95,
+                            colors: [
+                              Colors.transparent,
+                              vignetteColor,
+                            ],
+                            stops: const [0.55, 1.0],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // 3. VÙNG CHẠM JOYSTICK BÊN TRÁI MÀN HÌNH
                 Positioned(
                   left: 0,
                   top: 90,
@@ -2275,7 +3028,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                   ),
                 ),
 
-                // 3. GÓC TRÊN BÊN TRÁI: AVATAR CÁ MẬP, THANH MÁU, STAMINA, EXP & ĐIỂM SỐ
+                // 4. GÓC TRÊN BÊN TRÁI: AVATAR + VÒNG EXP + THANH HP/SP VÁT CHÉO + CHỌN MÀN 1 / MÀN 2
                 Positioned(
                   left: 14,
                   top: 10,
@@ -2287,7 +3040,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                   ),
                 ),
 
-                // 4. GÓC TRÊN BÊN PHẢI: MINI-MAP PHONG CÁCH PUBG (CHẤM ĐỎ VỊ TRÍ CÁ MẬP)
+                // 5. GÓC TRÊN BÊN PHẢI: MINI-MAP PHONG CÁCH PUBG (CHẤM ĐỎ VỊ TRÍ CÁ MẬP)
                 Positioned(
                   right: 14,
                   top: 10,
@@ -2299,7 +3052,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                   ),
                 ),
 
-                // 5. GÓC DƯỚI BÊN PHẢI: CỤM NÚT HÀNH ĐỘNG (ĐỚP, LƯỚT, XOÁY HÚT, SÓNG ÂM, CUỒNG NỘ)
+                // 6. GÓC DƯỚI BÊN PHẢI: CỤM 5 NÚT HÀNH ĐỘNG
                 Positioned(
                   right: 16,
                   bottom: 14,
@@ -2311,7 +3064,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                   ),
                 ),
 
-                // 6. THÔNG BÁO TIẾN HÓA / CUỒNG NỘ Ở GIỮA TRÊN MÀN HÌNH
+                // 7. THÔNG BÁO TIẾN HÓA / CHUYỂN MÀN / GOLD RUSH
                 if (_bannerAnnouncement != null)
                   Positioned(
                     top: 14,
@@ -2326,8 +3079,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              const Color(0xFFFF1744).withValues(alpha: 0.9),
-                              const Color(0xFFFF9100).withValues(alpha: 0.9),
+                              const Color(0xFFFF1744).withValues(alpha: 0.92),
+                              const Color(0xFFFF9100).withValues(alpha: 0.92),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(20),
@@ -2348,16 +3101,16 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 12.5,
+                            fontSize: 12.0,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 1.1,
+                            letterSpacing: 1.0,
                           ),
                         ),
                       ),
                     ),
                   ),
 
-                // 7. MÀN HÌNH TẠM DỪNG / HƯỚNG DẪN / GAME OVER
+                // 8. MODAL TẠM DỪNG / HƯỚNG DẪN / GAME OVER
                 if (_isPaused || _showHelpOverlay)
                   _buildPauseOrHelpModal(isVi),
                 if (_isGameOver) _buildGameOverModal(isVi),
@@ -2378,218 +3131,75 @@ class _SharkGameScreenState extends State<SharkGameScreen>
         : (_exp / stage.expRequired).clamp(0.0, 1.0);
     final bool frenzy = _frenzyTimer > 0;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF030D1E).withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: frenzy
-              ? const Color(0xFFFF1744)
-              : stage.auraColor.withValues(alpha: 0.55),
-          width: 1.3,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (frenzy ? const Color(0xFFFF1744) : stage.auraColor)
-                .withValues(alpha: 0.22),
-            blurRadius: 12,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      stage.auraColor.withValues(alpha: 0.45),
-                      const Color(0xFF04142C),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: frenzy ? const Color(0xFFFF1744) : stage.auraColor,
-                    width: 2.0,
-                  ),
-                ),
-                child: Image.asset(
-                  stage.assetPath,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              Positioned(
-                bottom: -4,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: frenzy ? const Color(0xFFFF1744) : stage.auraColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'LV.${stage.level}',
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w900,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 175,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        isVi ? stage.nameVi : stage.nameEn,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.0,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${stage.lengthMeters}m',
-                      style: TextStyle(
-                        color: stage.auraColor,
-                        fontSize: 10.0,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                _buildCompactBar(
-                  label: 'HP',
-                  ratio: hpRatio,
-                  color: hpRatio > 0.35
-                      ? const Color(0xFF00E676)
-                      : const Color(0xFFFF1744),
-                  valueText: '${_hp.toInt()}/${stage.maxHp.toInt()}',
-                ),
-                const SizedBox(height: 3),
-                _buildCompactBar(
-                  label: 'SP',
-                  ratio: staminaRatio,
-                  color: const Color(0xFF00E5FF),
-                  valueText: '${_stamina.toInt()}%',
-                ),
-                const SizedBox(height: 3),
-                _buildCompactBar(
-                  label: 'EXP',
-                  ratio: expRatio,
-                  color: const Color(0xFFFFD740),
-                  valueText: stage.level >= _evolutionStages.length
-                      ? 'MAX'
-                      : '$_exp/${stage.expRequired}',
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${isVi ? "ĐIỂM" : "SCORE"}: $_score',
-                      style: const TextStyle(
-                        color: Color(0xFFFFEA00),
-                        fontSize: 10.0,
-                        fontWeight: FontWeight.w900,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                    if (_comboCount >= 2)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF1744),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'COMBO x$_comboCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      )
-                    else
-                      Text(
-                        '${isVi ? "MỒI" : "PREY"}: $_fishEatenCount',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 9.5,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactBar({
-    required String label,
-    required double ratio,
-    required Color color,
-    required String valueText,
-  }) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 24,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 8.5,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-            ),
-          ),
-        ),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: SizedBox(
-              height: 6.5,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // HUY CHƯƠNG AVATAR TRÒN + VÒNG CUNG EXP
+            SizedBox(
+              width: 50,
+              height: 50,
               child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
                 children: [
-                  Container(color: Colors.white.withValues(alpha: 0.12)),
-                  FractionallySizedBox(
-                    widthFactor: ratio,
+                  Container(
+                    width: 44,
+                    height: 44,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          stage.auraColor.withValues(alpha: 0.55),
+                          const Color(0xEB041226),
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      stage.assetPath,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  CustomPaint(
+                    size: const Size(48, 48),
+                    painter: _AvatarExpRingPainter(
+                      expRatio: expRatio,
+                      frenzy: frenzy,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: -3,
                     child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [color.withValues(alpha: 0.75), color],
+                          colors: frenzy
+                              ? const [Color(0xFFFF1744), Color(0xFFB71C1C)]
+                              : const [Color(0xFFFFEA00), Color(0xFFFF8F00)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.black87, width: 1.0),
+                      ),
+                      child: Text(
+                        'LV.${stage.level}',
+                        style: TextStyle(
+                          color: frenzy ? Colors.white : Colors.black,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w900,
+                          height: 1.1,
                         ),
                       ),
                     ),
@@ -2597,27 +3207,298 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                 ],
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 5),
-        SizedBox(
-          width: 44,
-          child: Text(
-            valueText,
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 8.0,
-              fontFamily: 'monospace',
+            const SizedBox(width: 6),
+
+            // CỤM THANH MÁU & NĂNG LƯỢNG VÁT CHÉO
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xCC030D1C),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFFFFD740).withValues(alpha: 0.65),
+                          width: 0.9,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.emoji_events_rounded,
+                            color: Color(0xFFFFEA00),
+                            size: 11,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$_score',
+                            style: const TextStyle(
+                              color: Color(0xFFFFEA00),
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '• ${stage.lengthMeters}m',
+                            style: TextStyle(
+                              color: stage.auraColor,
+                              fontSize: 9.0,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    if (_comboCount >= 2)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _isGoldRushActive
+                                ? const [Color(0xFFFFEA00), Color(0xFFFF6D00)]
+                                : const [Color(0xFFFF1744), Color(0xFFFF6D00)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _isGoldRushActive
+                              ? 'GOLD x$_comboCount!'
+                              : 'x$_comboCount!',
+                          style: TextStyle(
+                            color: _isGoldRushActive ? Colors.black : Colors.white,
+                            fontSize: 9.0,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      )
+                    else
+                      Text(
+                        '${isVi ? "Mồi" : "Prey"}: $_fishEatenCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black,
+                              blurRadius: 4,
+                              offset: Offset(1, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                _buildSkewedGameBar(
+                  width: 152,
+                  height: 12.5,
+                  ratio: hpRatio,
+                  gradientColors: hpRatio > 0.35
+                      ? const [
+                          Color(0xFF00B248),
+                          Color(0xFF00E676),
+                          Color(0xFF69F0AE),
+                        ]
+                      : const [
+                          Color(0xFFB71C1C),
+                          Color(0xFFFF1744),
+                          Color(0xFFFF8A80),
+                        ],
+                  borderColor: hpRatio > 0.35
+                      ? const Color(0xFF00E676)
+                      : const Color(0xFFFF1744),
+                  overlayText: 'HP ${_hp.toInt()}/${stage.maxHp.toInt()}',
+                  showSegments: true,
+                ),
+                const SizedBox(height: 3),
+                _buildSkewedGameBar(
+                  width: 126,
+                  height: 6.5,
+                  ratio: staminaRatio,
+                  gradientColors: const [
+                    Color(0xFF00838F),
+                    Color(0xFF00E5FF),
+                    Color(0xFF84FFFF),
+                  ],
+                  borderColor: const Color(0xFF00E5FF),
+                  overlayText: null,
+                  showSegments: false,
+                ),
+              ],
             ),
-          ),
+          ],
+        ),
+        const SizedBox(height: 5),
+
+        // THANH CHUYỂN ĐỔI NHANH MÀN 1 (VỊNH SAN HÔ) <-> MÀN 2 (RÃNH DUNG NHAM MARIANA)
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildMapPillButton(
+              label: isVi ? 'MÀN 1: VỊNH SAN HÔ' : 'MAP 1: CORAL BAY',
+              isActive: _currentMap == _GameStageMap.coralBay,
+              activeColor: const Color(0xFF00E5FF),
+              onTap: () => _switchGameMap(_GameStageMap.coralBay),
+            ),
+            const SizedBox(width: 5),
+            _buildMapPillButton(
+              label: isVi ? 'MÀN 2: DUNG NHAM (x1.6)' : 'MAP 2: VOLCANO (x1.6)',
+              isActive: _currentMap == _GameStageMap.volcanicAbyss,
+              activeColor: const Color(0xFFFF5252),
+              onTap: () => _switchGameMap(_GameStageMap.volcanicAbyss),
+            ),
+          ],
         ),
       ],
     );
   }
 
+  Widget _buildMapPillButton({
+    required String label,
+    required bool isActive,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: isActive
+              ? activeColor.withValues(alpha: 0.25)
+              : const Color(0xAA020915),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive ? activeColor : Colors.white24,
+            width: isActive ? 1.1 : 0.8,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? activeColor : Colors.white60,
+            fontSize: 8.2,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkewedGameBar({
+    required double width,
+    required double height,
+    required double ratio,
+    required List<Color> gradientColors,
+    required Color borderColor,
+    required String? overlayText,
+    required bool showSegments,
+  }) {
+    return Transform(
+      transform: Matrix4.skewX(-0.24),
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: const Color(0xD9020812),
+          borderRadius: BorderRadius.circular(3.5),
+          border: Border.all(
+            color: borderColor.withValues(alpha: 0.75),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.55),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(2.5),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: ratio,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: gradientColors),
+                    ),
+                  ),
+                ),
+              ),
+              if (showSegments)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(
+                    4,
+                    (_) => Container(
+                      width: 0.8,
+                      height: height,
+                      color: Colors.black.withValues(alpha: 0.32),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: height * 0.36,
+                child: Container(
+                  color: Colors.white.withValues(alpha: 0.25),
+                ),
+              ),
+              if (overlayText != null)
+                Transform(
+                  transform: Matrix4.skewX(0.24),
+                  child: Text(
+                    overlayText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8.2,
+                      fontWeight: FontWeight.w900,
+                      fontFamily: 'monospace',
+                      height: 1.0,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black,
+                          blurRadius: 3,
+                          offset: Offset(0.8, 0.8),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTopRightPubgMinimapHUD(bool isVi, SoundService soundService) {
-    final int depthMeters = ((_playerY / worldHeight) * 11000).round();
+    final int depthMeters =
+        (((_playerY - seaSurfaceY) / (worldHeight - seaSurfaceY)) * 11000)
+            .clamp(0.0, 11000.0)
+            .round();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2677,9 +3558,13 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                 ),
               ),
               child: Text(
-                '${isVi ? "ĐỘ SÂU" : "DEPTH"}: ${depthMeters}m',
-                style: const TextStyle(
-                  color: Color(0xFF00F0FF),
+                _playerY < seaSurfaceY
+                    ? (isVi ? 'TRÊN KHÔNG!' : 'AIRBORNE!')
+                    : '${isVi ? "ĐỘ SÂU" : "DEPTH"}: ${depthMeters}m',
+                style: TextStyle(
+                  color: _playerY < seaSurfaceY
+                      ? const Color(0xFFFFEA00)
+                      : const Color(0xFF00F0FF),
                   fontSize: 9.5,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'monospace',
@@ -2713,11 +3598,13 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                 CustomPaint(
                   size: const Size(148, 96),
                   painter: _PubgMinimapPainter(
+                    currentMap: _currentMap,
                     playerX: _playerX,
                     playerY: _playerY,
                     headingAngle: _playerHeadingAngle,
                     playerLevel: _currentStage.level,
                     entities: _entities,
+                    vessels: _vessels,
                     pickups: _pickups,
                     pulsePhase: _playerSwimPhase,
                   ),
@@ -2779,14 +3666,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                         width: 6,
                         height: 6,
                         decoration: const BoxDecoration(
-                          color: Color(0xFFFF9100),
+                          color: Color(0xFFFFEA00),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 3),
-                      const Text(
-                        'Boss',
-                        style: TextStyle(
+                      Text(
+                        isVi ? 'Thuyền' : 'Boat',
+                        style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 7.5,
                         ),
@@ -2826,21 +3713,21 @@ class _SharkGameScreenState extends State<SharkGameScreen>
     final bool furyReady = _furyCharge >= 100.0 && _frenzyTimer <= 0;
 
     return SizedBox(
-      width: 215,
-      height: 175,
+      width: 224,
+      height: 184,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned(
-            left: 8,
-            bottom: 4,
+            left: 6,
+            bottom: 6,
             child: GestureDetector(
               onTapDown: (_) => setState(() => _isBoosting = true),
               onTapUp: (_) => setState(() => _isBoosting = false),
               onTapCancel: () => setState(() => _isBoosting = false),
               child: _buildSkillButton(
-                size: 56,
-                icon: Icons.bolt_rounded,
+                size: 58,
+                assetPath: 'assets/images/icon/skill_turbo_boost.png',
                 label: isVi ? 'TĂNG TỐC' : 'BOOST',
                 color: const Color(0xFF00E5FF),
                 isActive: _isBoosting,
@@ -2849,13 +3736,13 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             ),
           ),
           Positioned(
-            left: 44,
-            bottom: 68,
+            left: 46,
+            bottom: 72,
             child: GestureDetector(
               onTap: _triggerVortexSkill,
               child: _buildSkillButton(
-                size: 52,
-                icon: Icons.cyclone_rounded,
+                size: 56,
+                assetPath: 'assets/images/icon/skill_vortex_suction.png',
                 label: isVi ? 'HÚT MỒI' : 'VORTEX',
                 color: const Color(0xFF00E676),
                 isActive: _vortexTimer > 0,
@@ -2871,8 +3758,8 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             child: GestureDetector(
               onTap: _triggerSonarRoarSkill,
               child: _buildSkillButton(
-                size: 52,
-                icon: Icons.surround_sound_rounded,
+                size: 56,
+                assetPath: 'assets/images/icon/skill_sonar_roar.png',
                 label: isVi ? 'SÓNG ÂM' : 'ROAR',
                 color: const Color(0xFFE040FB),
                 isActive: false,
@@ -2887,14 +3774,14 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             child: GestureDetector(
               onTap: _triggerBloodFrenzy,
               child: _buildSkillButton(
-                size: 50,
-                icon: Icons.local_fire_department_rounded,
+                size: 54,
+                assetPath: 'assets/images/icon/skill_blood_frenzy.png',
                 label: _frenzyTimer > 0
                     ? '${_frenzyTimer.ceil()}s'
                     : '${_furyCharge.toInt()}%',
                 color: furyReady || _frenzyTimer > 0
                     ? const Color(0xFFFF1744)
-                    : Colors.white38,
+                    : const Color(0xFFFF9100),
                 isActive: furyReady || _frenzyTimer > 0,
                 cooldownText: null,
               ),
@@ -2905,50 +3792,76 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             bottom: 0,
             child: GestureDetector(
               onTapDown: (_) => _triggerBiteAction(),
-              child: Container(
-                width: 82,
-                height: 82,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFFFF1744).withValues(alpha: 0.92),
-                      const Color(0xFF880E4F).withValues(alpha: 0.95),
+              child: AnimatedScale(
+                scale: _biteAnimTimer > 0 ? 0.90 : 1.0,
+                duration: const Duration(milliseconds: 90),
+                child: SizedBox(
+                  width: 90,
+                  height: 90,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 86,
+                        height: 86,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0xFFFF1744).withValues(alpha: 0.42),
+                              const Color(0xFF041022).withValues(alpha: 0.78),
+                            ],
+                          ),
+                          border: Border.all(
+                            color: _biteAnimTimer > 0
+                                ? const Color(0xFFFFEA00)
+                                : const Color(0xFFFF1744),
+                            width: 2.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF1744)
+                                  .withValues(alpha: 0.48),
+                              blurRadius: 16,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: Image.asset(
+                          'assets/images/icon/skill_bite_shark.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: -2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF1744),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              width: 0.9,
+                            ),
+                          ),
+                          child: Text(
+                            isVi ? 'ĐỚP MỒI' : 'BITE',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9.0,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                  border: Border.all(
-                    color: _biteAnimTimer > 0
-                        ? const Color(0xFFFFEA00)
-                        : const Color(0xFFFF8A80),
-                    width: 2.6,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFF1744).withValues(alpha: 0.55),
-                      blurRadius: 16,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.pest_control_rodent_rounded,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isVi ? 'ĐỚP MỒI' : 'BITE',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ),
@@ -2960,68 +3873,91 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   Widget _buildSkillButton({
     required double size,
-    required IconData icon,
+    required String assetPath,
     required String label,
     required Color color,
     required bool isActive,
     required String? cooldownText,
   }) {
     final bool onCooldown = cooldownText != null;
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isActive
-            ? color.withValues(alpha: 0.38)
-            : const Color(0xFF041022).withValues(alpha: 0.82),
-        border: Border.all(
-          color: onCooldown ? Colors.white24 : color,
-          width: isActive ? 2.2 : 1.5,
-        ),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.5),
-                  blurRadius: 12,
-                ),
-              ]
-            : null,
-      ),
       child: Stack(
         alignment: Alignment.center,
+        clipBehavior: Clip.none,
         children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: onCooldown ? Colors.white30 : color,
-                size: size * 0.40,
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isActive
+                  ? color.withValues(alpha: 0.32)
+                  : const Color(0xFF041022).withValues(alpha: 0.68),
+              border: Border.all(
+                color: onCooldown
+                    ? Colors.white24
+                    : color.withValues(alpha: isActive ? 1.0 : 0.78),
+                width: isActive ? 2.2 : 1.4,
               ),
-              Text(
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.55),
+                        blurRadius: 12,
+                      ),
+                    ]
+                  : null,
+            ),
+            padding: const EdgeInsets.all(5),
+            child: Opacity(
+              opacity: onCooldown ? 0.38 : 1.0,
+              child: Image.asset(
+                assetPath,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -3,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFF030D1E).withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: onCooldown
+                      ? Colors.white24
+                      : color.withValues(alpha: 0.75),
+                  width: 0.8,
+                ),
+              ),
+              child: Text(
                 label,
                 style: TextStyle(
-                  color: onCooldown ? Colors.white38 : Colors.white,
-                  fontSize: 7.5,
+                  color: onCooldown ? Colors.white54 : Colors.white,
+                  fontSize: 7.2,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-            ],
+            ),
           ),
           if (onCooldown)
             Container(
+              width: size,
+              height: size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.black.withValues(alpha: 0.62),
+                color: Colors.black.withValues(alpha: 0.58),
               ),
               alignment: Alignment.center,
               child: Text(
                 cooldownText,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
                   fontFamily: 'monospace',
                 ),
               ),
@@ -3036,7 +3972,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
       color: Colors.black.withValues(alpha: 0.72),
       alignment: Alignment.center,
       child: Container(
-        width: 440,
+        width: 460,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: const Color(0xFF041226),
@@ -3058,7 +3994,7 @@ class _SharkGameScreenState extends State<SharkGameScreen>
                   : 'SHARK APEX HUNT - Tactical Guide',
               style: const TextStyle(
                 color: Color(0xFF00F0FF),
-                fontSize: 16,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 1.2,
               ),
@@ -3066,17 +4002,17 @@ class _SharkGameScreenState extends State<SharkGameScreen>
             const SizedBox(height: 12),
             Text(
               isVi
-                  ? '• Bên Trái: Kéo Joystick 360° để uốn lượn điều khiển hướng bơi của cá mập.\n'
-                    '• Bên Phải: Bấm [ĐỚP MỒI] để lao tới cắn xé, [TĂNG TỐC] để lướt nhanh, [HÚT MỒI] tạo xoáy nước hút cá vào miệng, [SÓNG ÂM] làm choáng cá lớn.\n'
-                    '• Quy tắc Cá Lớn Nuốt Cá Bé: Ăn các loài có chấm XANH để tăng EXP và Tiến Hóa từ Cá Mập Đầu Búa (1.8m) lên Megalodon & Leviathan (36m)!\n'
-                    '• Mini-Map Góc Phải: Chấm Đỏ là vị trí của bạn, Chấm Xanh là con mồi, Chấm Cam là Quái vật lớn.'
-                  : '• Left Joystick: Drag anywhere on the left side to steer your shark smoothly.\n'
-                    '• Right Action Buttons: Use [BITE] to lunge & chomp, [BOOST] to dash, [VORTEX] to suck prey in, and [ROAR] to stun predators.\n'
-                    '• Evolution Rule: Eat GREEN-tagged prey to gain EXP and evolve up to Megalodon & Leviathan!\n'
-                    '• Top-Right Radar: Red Dot is your position, Green Dots are prey, Orange Dots are giant bosses.',
+                  ? '• Mặt Biển & Thuyền Bè: Người bơi trên mặt nước sẽ bỏ chạy lên thuyền khi thấy bạn! Cẩn thận mũi lao bắn từ Thuyền & Thợ Săn. Từ LV.3+, hãy giữ [TĂNG TỐC] phi lên không trung húc vỡ thuyền để ăn thịt thủy thủ!\n'
+                    '• Độ Đói Khắt Khe: Máu tụt liên tục, buộc bạn phải săn mồi liên tục để sinh tồn.\n'
+                    '• 2 Màn Chơi: Chuyển đổi trực tiếp giữa Màn 1 (Vịnh San Hô) & Màn 2 (Rãnh Dung Nham Mariana - thưởng x1.6 EXP/Điểm!).\n'
+                    '• Cơn Sốt Vàng (Combo x6+): Đạt Combo 6 trở lên để kích hoạt Gold Rush bùng nổ điểm số!'
+                  : '• Boats & Swimmers: Swimmers flee onto boats when spotted! Watch out for Harpoons. At LV.3+, breach into the air to smash boats and devour crew!\n'
+                    '• Survival Hunger: HP drains steadily—keep hunting to stay alive.\n'
+                    '• 2 Ocean Maps: Switch between Stage 1 (Coral Bay) & Stage 2 (Mariana Volcano - x1.6 Rewards!).\n'
+                    '• Gold Rush (Combo x6+): Chain 6+ eats to trigger Gold Rush bonus!',
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 11.5,
+                fontSize: 11.2,
                 height: 1.45,
               ),
             ),
@@ -3125,107 +4061,231 @@ class _SharkGameScreenState extends State<SharkGameScreen>
 
   Widget _buildGameOverModal(bool isVi) {
     return Container(
-      color: Colors.black.withValues(alpha: 0.78),
+      color: Colors.black.withValues(alpha: 0.56),
       alignment: Alignment.center,
-      child: Container(
-        width: 400,
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: const Color(0xFF061020),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFFF1744), width: 2.0),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF1744).withValues(alpha: 0.35),
-              blurRadius: 24,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              isVi ? 'KẾT THÚC CHUYẾN ĐI SĂN!' : 'HUNT ENDED!',
-              style: const TextStyle(
-                color: Color(0xFFFF1744),
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.5,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            width: 392,
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+            decoration: BoxDecoration(
+              color: const Color(0xD4141821),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1.0,
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '${isVi ? "Cấp tiến hóa đạt được" : "Evolution Reached"}: LV.${_currentStage.level} (${isVi ? _currentStage.nameVi : _currentStage.nameEn})',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF00E5FF),
-                fontSize: 12.5,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${isVi ? "Điểm số" : "Score"}: $_score   |   ${isVi ? "Kỷ lục" : "Best"}: $_highScore',
-              style: const TextStyle(
-                color: Color(0xFFFFEA00),
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                fontFamily: 'monospace',
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${isVi ? "Số sinh vật đã săn" : "Creatures Devoured"}: $_fishEatenCount',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E5FF),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _initOceanWorld();
-                    });
-                  },
-                  icon: const Icon(Icons.replay_rounded),
-                  label: Text(
-                    isVi ? 'CHƠI LẠI NGAY' : 'PLAY AGAIN',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Colors.white30),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                  ),
-                  onPressed: _exitGame,
-                  icon: const Icon(Icons.home_rounded),
-                  label: Text(isVi ? 'TRANG CHỦ' : 'HOME'),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.48),
+                  blurRadius: 36,
+                  offset: const Offset(0, 18),
                 ),
               ],
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF453A).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: const Color(0xFFFF453A).withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Text(
+                    isVi ? 'KẾT THÚC' : 'GAME OVER',
+                    style: const TextStyle(
+                      color: Color(0xFFFF6961),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isVi ? 'Chuyến đi săn kết thúc' : 'Hunt Ended',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'LV.${_currentStage.level} · ${isVi ? _currentStage.nameVi : _currentStage.nameEn}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.68),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.09),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildGameOverStat(
+                          label: isVi ? 'Điểm số' : 'Score',
+                          value: '$_score',
+                          valueColor: Colors.white,
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 30,
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                      Expanded(
+                        child: _buildGameOverStat(
+                          label: isVi ? 'Kỷ lục' : 'Best',
+                          value: '$_highScore',
+                          valueColor: const Color(0xFFFFD60A),
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 30,
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                      Expanded(
+                        child: _buildGameOverStat(
+                          label: isVi ? 'Đã săn' : 'Devoured',
+                          value: '$_fishEatenCount',
+                          valueColor: const Color(0xFF64D2FF),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    // Nút Trang Chủ bên TRÁI
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.10),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                width: 0.8,
+                              ),
+                            ),
+                          ),
+                          onPressed: _exitGame,
+                          icon: const Icon(Icons.home_rounded, size: 19),
+                          label: Text(
+                            isVi ? 'Trang chủ' : 'Home',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Nút Chơi Lại bên PHẢI
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            elevation: 0,
+                            backgroundColor: const Color(0xFF0A84FF),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _initOceanWorld(map: _currentMap);
+                            });
+                          },
+                          icon: const Icon(Icons.replay_rounded, size: 19),
+                          label: Text(
+                            isVi ? 'Chơi lại' : 'Play Again',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGameOverStat({
+    required String label,
+    required String value,
+    required Color valueColor,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.55),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CUSTOM PAINTER 1: ENGINE BIẾN DẠNG LƯỚI XƯƠNG SỐNG 16 ĐỐT TRÊN GPU
-// (Skeletal Spine Mesh Deformation via canvas.drawVertices + ImageShader)
+// CUSTOM PAINTER 1: ENGINE BIẾN DẠNG LƯỚI XƯƠNG SỐNG 16 ĐỐT + 2 MÀN CHƠI
 // ═══════════════════════════════════════════════════════════════════════════
 class _SharkWorldCanvasPainter extends CustomPainter {
+  final _GameStageMap currentMap;
   final double playerX;
   final double playerY;
   final bool playerFacingRight;
@@ -3234,11 +4294,14 @@ class _SharkWorldCanvasPainter extends CustomPainter {
   final List<Offset> playerSpine;
   final _SharkEvolutionStage stage;
   final bool frenzyActive;
+  final bool goldRushActive;
   final bool isBoosting;
   final double biteAnimTimer;
   final double vortexTimer;
   final double invulnerableTimer;
   final List<_SeaEntity> entities;
+  final List<_SurfaceVessel> vessels;
+  final List<_HarpoonProjectile> harpoons;
   final List<_OceanPickup> pickups;
   final List<_GameParticle> particles;
   final List<_FloatingTextPopup> popups;
@@ -3247,6 +4310,7 @@ class _SharkWorldCanvasPainter extends CustomPainter {
   final bool isVi;
 
   _SharkWorldCanvasPainter({
+    required this.currentMap,
     required this.playerX,
     required this.playerY,
     required this.playerFacingRight,
@@ -3255,11 +4319,14 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     required this.playerSpine,
     required this.stage,
     required this.frenzyActive,
+    required this.goldRushActive,
     required this.isBoosting,
     required this.biteAnimTimer,
     required this.vortexTimer,
     required this.invulnerableTimer,
     required this.entities,
+    required this.vessels,
+    required this.harpoons,
     required this.pickups,
     required this.particles,
     required this.popups,
@@ -3272,18 +4339,23 @@ class _SharkWorldCanvasPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const double worldW = _SharkGameScreenState.worldWidth;
     const double worldH = _SharkGameScreenState.worldHeight;
+    const double seaY = _SharkGameScreenState.seaSurfaceY;
+    final bool isMap2 = currentMap == _GameStageMap.volcanicAbyss;
 
-    final double depthRatio = (playerY / worldH).clamp(0.0, 1.0);
-    final Color topWaterColor = Color.lerp(
-      const Color(0xFF007799),
-      const Color(0xFF020B1A),
-      depthRatio,
-    )!;
-    final Color bottomWaterColor = Color.lerp(
-      const Color(0xFF013A63),
-      const Color(0xFF01040A),
-      depthRatio,
-    )!;
+    final double depthRatio =
+        ((playerY - seaY) / (worldH - seaY)).clamp(0.0, 1.0);
+
+    // Màu sắc nước biển khác biệt hoàn toàn giữa Màn 1 (Xanh San Hô) & Màn 2 (Tím Đỏ Dung Nham)
+    final Color topWaterColor = isMap2
+        ? Color.lerp(
+            const Color(0xFF0B2244), const Color(0xFF14051A), depthRatio)!
+        : Color.lerp(
+            const Color(0xFF0083A8), const Color(0xFF020D20), depthRatio)!;
+    final Color bottomWaterColor = isMap2
+        ? Color.lerp(
+            const Color(0xFF071128), const Color(0xFF1F060A), depthRatio)!
+        : Color.lerp(
+            const Color(0xFF013A63), const Color(0xFF01040A), depthRatio)!;
 
     final Rect screenRect = Offset.zero & size;
     final Paint bgPaint = Paint()
@@ -3302,11 +4374,22 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     canvas.save();
     canvas.translate(-camX, -camY);
 
-    if (camY < 750.0) {
-      _paintSunlitSurfaceAndRays(canvas, worldW);
+    // 1. Vẽ Bầu Trời & Đường Chân Trời khi ở gần mặt biển (Y < seaY)
+    if (camY < seaY + 480.0) {
+      _paintSkyAndSeaSurface(canvas, worldW, seaY, isMap2);
     }
 
-    _paintSeabedAndHydrothermalVents(canvas, camX, camY, size, worldW, worldH);
+    // 2. Vẽ Đáy Biển & Rãnh Núi Lửa Dung Nham (Màn 2 rực lửa!)
+    _paintSeabedAndHydrothermalVents(
+        canvas, camX, camY, size, worldW, worldH, isMap2);
+
+    // 3. Vẽ Thuyền Đánh Cá & Bè Gỗ trên mặt biển
+    for (final v in vessels) {
+      if (v.isDestroyed) continue;
+      if (v.x + v.width < camX || v.x - v.width > camX + size.width) continue;
+      if (camY > seaY + 120.0) continue;
+      _paintSurfaceVessel(canvas, v, seaY);
+    }
 
     if (vortexTimer > 0) {
       _paintWhirlpoolVortex(canvas);
@@ -3322,7 +4405,12 @@ class _SharkWorldCanvasPainter extends CustomPainter {
       _paintPickup(canvas, p);
     }
 
-    // Vẽ toàn bộ Sinh Vật Biển bằng Lưới Xương Sống 16 Đốt (16-Node Spine Mesh)
+    // 4. Vẽ Mũi Lao (Harpoon) đang bay
+    for (final h in harpoons) {
+      _paintHarpoon(canvas, h);
+    }
+
+    // 5. Vẽ Sinh Vật & Người Bơi bằng Lưới Xương Sống 16 Đốt
     for (final e in entities) {
       final double pad = e.template.radius * 3.0;
       if (e.x + pad < camX ||
@@ -3334,7 +4422,7 @@ class _SharkWorldCanvasPainter extends CustomPainter {
       _paintSeaEntityWithSpineMesh(canvas, e);
     }
 
-    // Vẽ Cá Mập Người Chơi bằng Lưới Xương Sống 16 Đốt
+    // 6. Vẽ Cá Mập Người Chơi
     _paintPlayerSharkWithSpineMesh(canvas);
 
     for (final sw in shockwaves) {
@@ -3374,7 +4462,261 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// Hàm lõi: Vẽ biến dạng Lưới Xương Sống 16 Đốt (Carangiform S-Curve + Kinematic Turn Mesh)
+  void _paintSkyAndSeaSurface(
+      Canvas canvas, double worldW, double seaY, bool isMap2) {
+    // 1. Bầu trời gradient chuyển sắc tự nhiên + mặt trời lấp lánh ở tầng mây
+    final Rect skyRect = Rect.fromLTWH(0, 0, worldW, seaY);
+    final Paint skyPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: isMap2
+            ? const [
+                Color(0xFF140724),
+                Color(0xFF421044),
+                Color(0xFF8C143C),
+                Color(0xFFD84315),
+              ]
+            : const [
+                Color(0xFF0288D1),
+                Color(0xFF4FC3F7),
+                Color(0xFFB3E5FC),
+                Color(0xFFE0F7FA),
+              ],
+        stops: const [0.0, 0.45, 0.82, 1.0],
+      ).createShader(skyRect);
+    canvas.drawRect(skyRect, skyPaint);
+
+    // 1b. Hiệu ứng bầu trời sinh động cho Màn 2: Vầng Trăng Máu / Nhật Thực Núi Lửa & Tro bụi
+    if (isMap2) {
+      final Offset moonPos = Offset(worldW * 0.5, seaY - 92);
+      canvas.drawCircle(
+        moonPos,
+        130,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              const Color(0x99FF5722),
+              const Color(0x33D500F9),
+              Colors.transparent,
+            ],
+          ).createShader(Rect.fromCircle(center: moonPos, radius: 130)),
+      );
+      canvas.drawCircle(
+        moonPos,
+        46,
+        Paint()..color = const Color(0xCCFF6E40),
+      );
+      canvas.drawCircle(
+        Offset(moonPos.dx - 8, moonPos.dy - 5),
+        38,
+        Paint()..color = const Color(0xFF1A0726),
+      );
+
+      // Tro lửa núi lửa lơ lửng trên bầu trời Màn 2
+      final Paint skyEmberPaint = Paint()..style = PaintingStyle.fill;
+      for (int i = 0; i < 28; i++) {
+        final double ex = (i * 157.0 + playerSwimPhase * 14.0) % worldW;
+        final double ey =
+            seaY - 12.0 - ((i * 39.0 + playerSwimPhase * 22.0) % (seaY - 24.0));
+        skyEmberPaint.color = (i % 2 == 0
+                ? const Color(0xFFFFAB40)
+                : const Color(0xFFFF5252))
+            .withValues(alpha: 0.45 + 0.35 * math.sin(playerSwimPhase + i));
+        canvas.drawCircle(Offset(ex, ey), (i % 3) + 1.2, skyEmberPaint);
+      }
+    }
+
+    // 2. Lớp sóng xa (Background Swell - di chuyển ngược chiều nhẹ)
+    final Path backWave = Path()..moveTo(0, seaY + 42);
+    for (double x = 0; x <= worldW; x += 32) {
+      final double wy = seaY -
+          4.0 +
+          math.sin(x * 0.018 - playerSwimPhase * 0.55) * 7.5 +
+          math.cos(x * 0.042 + playerSwimPhase * 0.35) * 3.0;
+      backWave.lineTo(x, wy);
+    }
+    backWave.lineTo(worldW, seaY + 55);
+    backWave.lineTo(0, seaY + 55);
+    backWave.close();
+    canvas.drawPath(
+      backWave,
+      Paint()
+        ..color = (isMap2 ? const Color(0xFF0D2B52) : const Color(0xFF00698C))
+            .withValues(alpha: 0.55),
+    );
+
+    // 3. Lớp sóng chính ở đường chân trời mặt biển (Main Rolling Ocean Swell)
+    final Path midWave = Path()..moveTo(0, seaY + 55);
+    final Path crestLine = Path();
+    bool firstCrest = true;
+    for (double x = 0; x <= worldW; x += 24) {
+      final double wy = seaY +
+          math.sin(x * 0.024 + playerSwimPhase * 0.85) * 8.5 +
+          math.sin(x * 0.058 - playerSwimPhase * 0.45) * 3.2;
+      midWave.lineTo(x, wy);
+      if (firstCrest) {
+        crestLine.moveTo(x, wy);
+        firstCrest = false;
+      } else {
+        crestLine.lineTo(x, wy);
+      }
+    }
+    midWave.lineTo(worldW, seaY + 75);
+    midWave.lineTo(0, seaY + 75);
+    midWave.close();
+
+    canvas.drawPath(
+      midWave,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isMap2
+              ? const [Color(0xAA0E3B66), Color(0x000B2244)]
+              : const [Color(0xCC26C6DA), Color(0x000083A8)],
+        ).createShader(Rect.fromLTWH(0, seaY - 12, worldW, 88)),
+    );
+
+    // 4. Đường viền bọt trắng lấp lánh trên đỉnh sóng (Realistic Sea Foam Crest + Specular Shimmer)
+    canvas.drawPath(
+      crestLine,
+      Paint()
+        ..color = Colors.white.withValues(alpha: isMap2 ? 0.42 : 0.72)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+    );
+    canvas.drawPath(
+      crestLine,
+      Paint()
+        ..color = Colors.white.withValues(alpha: isMap2 ? 0.55 : 0.90)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+
+    // 5. Lưới ánh sáng khúc xạ dưới mặt nước (Underwater Caustic Ripples)
+    final Paint causticPaint = Paint()
+      ..color = (isMap2 ? const Color(0xFF40C4FF) : Colors.white)
+          .withValues(alpha: 0.14)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    for (double x = 20; x < worldW; x += 140) {
+      final double cx = x + math.sin(playerSwimPhase * 0.6 + x) * 18.0;
+      final double cy = seaY + 26.0 + math.cos(playerSwimPhase * 0.7 + x) * 6.0;
+      canvas.drawArc(
+        Rect.fromCenter(center: Offset(cx, cy), width: 65, height: 14),
+        0,
+        math.pi,
+        false,
+        causticPaint,
+      );
+    }
+
+    // 6. Chùm tia nắng chiếu xuyên mặt nước (Volumetric Sun God-Rays)
+    final Paint rayPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          (isMap2 ? const Color(0x28FF7043) : const Color(0x3AE0F7FA)),
+          const Color(0x1000E5FF),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, seaY, 200, 620));
+
+    for (double x = 80; x < worldW; x += 260) {
+      final double sway = math.sin(playerSwimPhase * 0.2 + x * 0.01) * 28.0;
+      final Path rayPath = Path()
+        ..moveTo(x, seaY)
+        ..lineTo(x + 75, seaY)
+        ..lineTo(x + 170 + sway, seaY + 620)
+        ..lineTo(x - 40 + sway, seaY + 620)
+        ..close();
+      canvas.drawPath(rayPath, rayPaint);
+    }
+  }
+
+  void _paintSurfaceVessel(
+      Canvas canvas, _SurfaceVessel v, double seaY) {
+    final String path = v.isFishingBoat
+        ? 'assets/images/creatures/game_fishing_boat.png'
+        : 'assets/images/creatures/game_wooden_raft.png';
+    final _LoadedSpriteMesh? mesh = loadedMeshes[path];
+    if (mesh == null) return;
+
+    final double bobY = math.sin(v.bobPhase) * 5.0;
+    final double tilt = math.cos(v.bobPhase * 0.8) * 0.04;
+    final double centerY = seaY - v.height * 0.16 + bobY;
+
+    canvas.save();
+    canvas.translate(v.x, centerY);
+    canvas.rotate(tilt);
+    if (v.vx > 0) {
+      canvas.scale(-1.0, 1.0);
+    }
+
+    final Rect dst = Rect.fromCenter(
+        center: Offset.zero, width: v.width, height: v.height);
+    final Rect src = Rect.fromLTWH(
+        0, 0, mesh.image.width.toDouble(), mesh.image.height.toDouble());
+    final Paint p = Paint()..filterQuality = FilterQuality.medium;
+    if (v.hitFlashTimer > 0) {
+      p.colorFilter = const ColorFilter.mode(
+        Color(0x99FF1744),
+        BlendMode.srcATop,
+      );
+    }
+    canvas.drawImageRect(mesh.image, src, dst, p);
+    canvas.restore();
+
+    // Thanh máu thuyền nếu đã bị húc hoặc cá mập đủ LV.3+
+    if (v.hp < v.maxHp || stage.level >= 3) {
+      const double barW = 72.0;
+      const double barH = 5.0;
+      final Offset barPos = Offset(v.x - barW * 0.5, centerY - v.height * 0.55);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(barPos & const Size(barW, barH), const Radius.circular(3)),
+        Paint()..color = Colors.black54,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          barPos & Size(barW * (v.hp / v.maxHp).clamp(0.0, 1.0), barH),
+          const Radius.circular(3),
+        ),
+        Paint()
+          ..color = stage.level >= 3
+              ? const Color(0xFFFFEA00)
+              : const Color(0xFFFF1744),
+      );
+    }
+  }
+
+  void _paintHarpoon(Canvas canvas, _HarpoonProjectile h) {
+    final double angle = math.atan2(h.vy, h.vx);
+    canvas.save();
+    canvas.translate(h.x, h.y);
+    canvas.rotate(angle);
+
+    // Thân mũi lao thép phát sáng cảnh báo đỏ
+    canvas.drawLine(
+      const Offset(-18, 0),
+      const Offset(14, 0),
+      Paint()
+        ..color = const Color(0xFFE0E0E0)
+        ..strokeWidth = 2.8
+        ..strokeCap = StrokeCap.round,
+    );
+    final Path head = Path()
+      ..moveTo(20, 0)
+      ..lineTo(9, -5)
+      ..lineTo(11, 0)
+      ..lineTo(9, 5)
+      ..close();
+    canvas.drawPath(head, Paint()..color = const Color(0xFFFF1744));
+    canvas.restore();
+  }
+
   void _drawDeformedSpineMesh({
     required Canvas canvas,
     required _LoadedSpriteMesh mesh,
@@ -3393,7 +4735,6 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     final double imgW = mesh.image.width.toDouble();
     final double imgH = mesh.image.height.toDouble();
 
-    // Tọa độ UV pixel của Mõm (Head) và Chóp Đuôi (Tail) trong ảnh gốc
     final double uHead =
         (assetFacesRight ? uvBounds.right : uvBounds.left) * imgW;
     final double uTail =
@@ -3401,7 +4742,6 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     final double vTop = uvBounds.top * imgH;
     final double vBot = uvBounds.bottom * imgH;
 
-    // Đảm bảo độ dày không bị bẹp về 0 khi đang cuộn người quay đầu 3D
     final double signedFlip = dorsalFlip >= 0
         ? math.max(0.32, dorsalFlip)
         : math.min(-0.32, dorsalFlip);
@@ -3412,9 +4752,8 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     final List<Offset> texCoords = List<Offset>.filled(n * 2, Offset.zero);
 
     for (int i = 0; i < n; i++) {
-      final double u = i / (n - 1); // 0.0 (Mõm) -> 1.0 (Chóp Đuôi)
+      final double u = i / (n - 1);
 
-      // Vector tiếp tuyến dọc xương sống (hướng từ Đuôi về Đầu)
       Offset tangent;
       if (i == 0) {
         tangent = spine[0] - spine[1];
@@ -3426,22 +4765,14 @@ class _SharkWorldCanvasPainter extends CustomPainter {
       final double tLen = tangent.distance;
       final Offset unitT =
           tLen > 0.001 ? (tangent / tLen) : const Offset(1.0, 0.0);
-
-      // Vector pháp tuyến vuông góc với đốt xương sống
       final Offset normal = Offset(-unitT.dy, unitT.dx);
 
-      // Sóng truyền cơ học chữ S (Carangiform Traveling Wave):
-      // Đầu ổn định (u^1.75 gần 0), thân lượn nhẹ, cuống đuôi và vây đuôi vẫy mạnh với độ trễ pha -4.4*u
       final double envelope = math.pow(u, 1.72).toDouble();
       final double waveOffset =
           maxWaveAmp * envelope * math.sin(swimPhase - 4.4 * u);
-
       final Offset displacedCenter = spine[i] + normal * waveOffset;
-
-      // Vector hướng lên vây lưng (Dorsal Up) giữ cho cá không bao giờ bị lật ngửa bụng
       final Offset dorsalUp = normal * (-signedFlip);
 
-      // Hiệu ứng há rộng hàm khi bấm ĐỚP ở 4 đốt đầu tiên (i = 0..3)
       double halfH = bodyHeight * 0.5;
       if (jawOpenProgress > 0.01 && i <= 3) {
         final double jawFactor =
@@ -3484,6 +4815,8 @@ class _SharkWorldCanvasPainter extends CustomPainter {
         paintToUse = mesh.hitFlashShaderPaint;
       } else if (e.stunTimer > 0) {
         paintToUse = mesh.stunShaderPaint;
+      } else if (goldRushActive && isEdible && !e.template.isHuman) {
+        paintToUse = mesh.goldRushShaderPaint;
       }
 
       _drawDeformedSpineMesh(
@@ -3515,19 +4848,21 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     final double bodyHeight =
         (bodyLen / stage.aspectRatio).clamp(baseR * 0.85, baseR * 1.9);
 
-    // 1. Vòng hào quang mỏng dưới thân cá mập người chơi
-    final Color ringColor =
-        frenzyActive ? const Color(0xFFFF1744) : stage.auraColor;
+    final Color ringColor = frenzyActive
+        ? const Color(0xFFFF1744)
+        : (goldRushActive ? const Color(0xFFFFD740) : stage.auraColor);
     final Paint auraPaint = Paint()
       ..color = ringColor.withValues(alpha: frenzyActive ? 0.35 : 0.14)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18.0);
     canvas.drawCircle(Offset(playerX, playerY), baseR * 1.2, auraPaint);
 
-    // 2. Vẽ Lưới Xương Sống 16 Đốt của Cá Mập Người Chơi
     final _LoadedSpriteMesh? mesh = loadedMeshes[stage.assetPath];
     if (mesh != null) {
-      final Paint activePaint =
-          frenzyActive ? mesh.frenzyShaderPaint : mesh.normalShaderPaint;
+      final Paint activePaint = frenzyActive
+          ? mesh.frenzyShaderPaint
+          : (goldRushActive
+              ? mesh.goldRushShaderPaint
+              : mesh.normalShaderPaint);
       final double jawProgress = (biteAnimTimer / 0.28).clamp(0.0, 1.0);
 
       _drawDeformedSpineMesh(
@@ -3546,7 +4881,6 @@ class _SharkWorldCanvasPainter extends CustomPainter {
       );
     }
 
-    // 3. Hiệu ứng Sóng Nước Cắn Xé trước Mõm khi bấm nút ĐỚP
     if (biteAnimTimer > 0) {
       final Offset snout = playerSpine[0];
       final Paint jawWavePaint = Paint()
@@ -3596,48 +4930,12 @@ class _SharkWorldCanvasPainter extends CustomPainter {
       );
     }
 
-    if (isDangerous) {
+    if (isDangerous || e.template.isHarpoonHunter) {
       canvas.drawCircle(
         Offset(0, -r * 0.75 - 15.0),
         3.8,
         Paint()..color = const Color(0xFFFF1744),
       );
-    }
-  }
-
-  void _paintSunlitSurfaceAndRays(Canvas canvas, double worldW) {
-    final Paint surfacePaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xCC80DEEA),
-          Color(0x4400BCD4),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, worldW, 140));
-    canvas.drawRect(Rect.fromLTWH(0, 0, worldW, 140), surfacePaint);
-
-    final Paint rayPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0x38E0F7FA),
-          Color(0x1200E5FF),
-          Colors.transparent,
-        ],
-      ).createShader(const Rect.fromLTWH(0, 0, 200, 620));
-
-    for (double x = 80; x < worldW; x += 260) {
-      final double sway = math.sin(playerSwimPhase * 0.2 + x * 0.01) * 28.0;
-      final Path rayPath = Path()
-        ..moveTo(x, 0)
-        ..lineTo(x + 75, 0)
-        ..lineTo(x + 170 + sway, 620)
-        ..lineTo(x - 40 + sway, 620)
-        ..close();
-      canvas.drawPath(rayPath, rayPaint);
     }
   }
 
@@ -3648,12 +4946,14 @@ class _SharkWorldCanvasPainter extends CustomPainter {
     Size size,
     double worldW,
     double worldH,
+    bool isMap2,
   ) {
     final Paint snowPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.16);
+      ..color = (isMap2 ? const Color(0xFFFF8A65) : Colors.white)
+          .withValues(alpha: 0.16);
     final int startCellX = (camX ~/ 180);
     final int endCellX = ((camX + size.width) ~/ 180) + 1;
-    final int startCellY = (camY ~/ 180);
+    final int startCellY = math.max(2, (camY ~/ 180));
     final int endCellY = ((camY + size.height) ~/ 180) + 1;
 
     for (int gx = startCellX; gx <= endCellX; gx++) {
@@ -3661,36 +4961,132 @@ class _SharkWorldCanvasPainter extends CustomPainter {
         final int hash = (gx * 73856093) ^ (gy * 19349663);
         final double px = gx * 180.0 + (hash.abs() % 160);
         final double py = gy * 180.0 + ((hash ~/ 17).abs() % 160);
-        canvas.drawCircle(Offset(px, py), (hash.abs() % 3) + 1.0, snowPaint);
+        if (isMap2) {
+          // Màn 2: Tàn lửa dung nham bay lên & hạt phát quang sinh học tím/cyan sống động
+          final double driftY =
+              (py - playerSwimPhase * (18.0 + (hash.abs() % 14))) % worldH;
+          final double emberY = driftY < 260 ? driftY + worldH - 260 : driftY;
+          final double pulse =
+              0.35 + 0.35 * math.sin(playerSwimPhase * 1.4 + hash * 0.01);
+          final bool isEmber = hash.abs() % 3 != 0;
+          final Color moteColor = isEmber
+              ? const Color(0xFFFF7043)
+              : (hash.abs() % 2 == 0
+                  ? const Color(0xFFE040FB)
+                  : const Color(0xFF18FFFF));
+          final double radius = (hash.abs() % 3) + 1.3;
+          if (hash.abs() % 4 == 0) {
+            canvas.drawCircle(
+              Offset(px, emberY),
+              radius * 2.8,
+              Paint()
+                ..color = moteColor.withValues(alpha: pulse * 0.35)
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0),
+            );
+          }
+          canvas.drawCircle(
+            Offset(px, emberY),
+            radius,
+            Paint()..color = moteColor.withValues(alpha: pulse),
+          );
+        } else {
+          canvas.drawCircle(Offset(px, py), (hash.abs() % 3) + 1.0, snowPaint);
+        }
       }
     }
 
-    if (camY + size.height > worldH - 280.0) {
-      final Path seabed = Path()..moveTo(0, worldH);
-      for (double x = 0; x <= worldW; x += 160) {
-        final double ridgeH =
-            55.0 + math.sin(x * 0.008) * 35.0 + math.cos(x * 0.02) * 20.0;
-        seabed.lineTo(x, worldH - ridgeH);
+    if (camY + size.height > worldH - 260.0) {
+      // Đáy biển tối giản, thanh thoát: Đồi cát mềm uốn lượn nhẹ & sương mù đáy vực
+      // 1. Lớp sương mù đáy vực dịu mắt (Soft Abyssal Floor Mist)
+      final Rect mistRect = Rect.fromLTWH(0, worldH - 180, worldW, 180);
+      canvas.drawRect(
+        mistRect,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isMap2
+                ? [
+                    Colors.transparent,
+                    const Color(0x553A080C),
+                    const Color(0xCC120204),
+                  ]
+                : [
+                    Colors.transparent,
+                    const Color(0x44031B33),
+                    const Color(0xCC010914),
+                  ],
+          ).createShader(mistRect),
+      );
+
+      // 2. Đường cồn cát đáy biển uốn lượn mềm mại bằng Bezier mượt mà (không gồ ghề rối mắt)
+      final Path sandFloor = Path()..moveTo(0, worldH);
+      const double step = 220.0;
+      double prevX = 0.0;
+      double prevY = worldH - 58.0;
+      sandFloor.lineTo(prevX, prevY);
+
+      for (double x = step; x <= worldW + step; x += step) {
+        final double nextY = worldH - (54.0 + math.sin(x * 0.0045) * 20.0);
+        final double midX = (prevX + x) * 0.5;
+        final double midY = (prevY + nextY) * 0.5;
+        sandFloor.quadraticBezierTo(prevX, prevY, midX, midY);
+        prevX = x;
+        prevY = nextY;
       }
-      seabed.lineTo(worldW, worldH);
-      seabed.close();
+      sandFloor.lineTo(worldW, worldH);
+      sandFloor.close();
 
-      final Paint rockPaint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF0A192F),
-            Color(0xFF02060D),
-          ],
-        ).createShader(Rect.fromLTWH(0, worldH - 140, worldW, 140));
-      canvas.drawPath(seabed, rockPaint);
+      canvas.drawPath(
+        sandFloor,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isMap2
+                ? const [Color(0xFF26090D), Color(0xFF090203)]
+                : const [Color(0xFF0A243D), Color(0xFF020810)],
+          ).createShader(Rect.fromLTWH(0, worldH - 95, worldW, 95)),
+      );
 
-      final Paint lavaGlow = Paint()
-        ..color = const Color(0xFFFF3D00).withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18.0);
-      for (double vx = 350; vx < worldW; vx += 650) {
-        canvas.drawCircle(Offset(vx, worldH - 35), 48.0, lavaGlow);
+      // 3. Điểm nhấn ánh sáng tinh tế (Vệt dung nham hắt sáng dịu ở Màn 2 / Điểm phát quang nhẹ ở Màn 1)
+      if (isMap2) {
+        final Paint gentleGlow = Paint()
+          ..color = const Color(0xFFFF3D00).withValues(alpha: 0.38)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26.0);
+        for (double vx = 380; vx < worldW; vx += 650) {
+          final double pulse =
+              0.78 + 0.22 * math.sin(playerSwimPhase * 1.3 + vx * 0.01);
+          // Luồng ánh sáng nhiệt thủy hắt dịu lên tầng nước sâu
+          final Rect plumeRect = Rect.fromCenter(
+            center: Offset(vx, worldH - 120),
+            width: 110,
+            height: 210,
+          );
+          canvas.drawOval(
+            plumeRect,
+            Paint()
+              ..shader = LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  const Color(0xFFFF5722).withValues(alpha: 0.26 * pulse),
+                  const Color(0xFFD500F9).withValues(alpha: 0.08 * pulse),
+                  Colors.transparent,
+                ],
+              ).createShader(plumeRect),
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(vx, worldH - 34), width: 96, height: 28),
+            gentleGlow,
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(vx, worldH - 34), width: 38, height: 10),
+            Paint()..color = const Color(0xCCFF9100),
+          );
+        }
       }
     }
   }
@@ -3784,23 +5180,27 @@ class _SharkWorldCanvasPainter extends CustomPainter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CUSTOM PAINTER 2: MINI-MAP RADAR PHONG CÁCH PUBG (CHẤM ĐỎ VỊ TRÍ CÁ MẬP)
+// CUSTOM PAINTER 2: MINI-MAP RADAR PHONG CÁCH PUBG (THÊM VỊ TRÍ THUYỀN)
 // ═══════════════════════════════════════════════════════════════════════════
 class _PubgMinimapPainter extends CustomPainter {
+  final _GameStageMap currentMap;
   final double playerX;
   final double playerY;
   final double headingAngle;
   final int playerLevel;
   final List<_SeaEntity> entities;
+  final List<_SurfaceVessel> vessels;
   final List<_OceanPickup> pickups;
   final double pulsePhase;
 
   _PubgMinimapPainter({
+    required this.currentMap,
     required this.playerX,
     required this.playerY,
     required this.headingAngle,
     required this.playerLevel,
     required this.entities,
+    required this.vessels,
     required this.pickups,
     required this.pulsePhase,
   });
@@ -3809,17 +5209,24 @@ class _PubgMinimapPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const double worldW = _SharkGameScreenState.worldWidth;
     const double worldH = _SharkGameScreenState.worldHeight;
+    final bool isMap2 = currentMap == _GameStageMap.volcanicAbyss;
 
     final Rect fullRect = Offset.zero & size;
     final Paint bgPaint = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFF042B44),
-          Color(0xFF02182B),
-          Color(0xFF010913),
-        ],
+        colors: isMap2
+            ? const [
+                Color(0xFF280B2E),
+                Color(0xFF150822),
+                Color(0xFF220505),
+              ]
+            : const [
+                Color(0xFF042B44),
+                Color(0xFF02182B),
+                Color(0xFF010913),
+              ],
       ).createShader(fullRect);
     canvas.drawRect(fullRect, bgPaint);
 
@@ -3833,17 +5240,15 @@ class _PubgMinimapPainter extends CustomPainter {
       canvas.drawLine(Offset(0, gy), Offset(size.width, gy), gridPaint);
     }
 
-    for (final p in pickups) {
-      if (p.type == _PickupType.healingPearl ||
-          p.type == _PickupType.goldenStar) {
-        final double mx = (p.x / worldW) * size.width;
-        final double my = (p.y / worldH) * size.height;
-        canvas.drawCircle(
-          Offset(mx, my),
-          1.8,
-          Paint()..color = const Color(0xFF00E5FF),
-        );
-      }
+    // Vẽ Thuyền & Bè trên mặt nước (Chấm vàng)
+    for (final v in vessels) {
+      if (v.isDestroyed) continue;
+      final double vx = (v.x / worldW) * size.width;
+      final double vy = (_SharkGameScreenState.seaSurfaceY / worldH) * size.height;
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset(vx, vy), width: 6.5, height: 3.2),
+        Paint()..color = const Color(0xFFFFEA00),
+      );
     }
 
     for (final e in entities) {
@@ -3910,7 +5315,7 @@ class _PubgMinimapPainter extends CustomPainter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CUSTOM PAINTER 3: CẦN ĐIỀU KHIỂN ẢO BÊN TRÁI (VIRTUAL ANALOG JOYSTICK)
+// CUSTOM PAINTER 3: CẦN ĐIỀU KHIỂN ẢO BÊN TRÁI CHUẨN GAME MOBA / PUBG
 // ═══════════════════════════════════════════════════════════════════════════
 class _VirtualJoystickPainter extends CustomPainter {
   final Offset? origin;
@@ -3925,68 +5330,256 @@ class _VirtualJoystickPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final bool isActive = origin != null;
     final Offset baseCenter = origin ?? defaultCenter;
     final Offset knobCenter = current ?? baseCenter;
-    const double outerRadius = 54.0;
-    const double innerRadius = 22.0;
+    const double outerRadius = 56.0;
+    const double innerRadius = 21.0;
 
+    final Offset delta = knobCenter - baseCenter;
+    final double dist = delta.distance;
+    final double dragRatio = (dist / outerRadius).clamp(0.0, 1.0);
+    final double dragAngle = dist > 2.0 ? math.atan2(delta.dy, delta.dx) : 0.0;
+    final double masterAlpha = isActive ? 0.95 : 0.52;
+
+    final Rect baseRect =
+        Rect.fromCircle(center: baseCenter, radius: outerRadius);
     final Paint baseFill = Paint()
-      ..color = const Color(0xFF031024).withValues(alpha: 0.55)
-      ..style = PaintingStyle.fill;
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFF020B18).withValues(alpha: 0.15 * masterAlpha),
+          const Color(0xFF041830).withValues(alpha: 0.42 * masterAlpha),
+          const Color(0xFF00E5FF).withValues(alpha: 0.16 * masterAlpha),
+        ],
+        stops: const [0.0, 0.72, 1.0],
+      ).createShader(baseRect);
     canvas.drawCircle(baseCenter, outerRadius, baseFill);
 
-    final Paint baseBorder = Paint()
-      ..color = const Color(0xFF00F0FF)
-          .withValues(alpha: origin != null ? 0.75 : 0.38)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-    canvas.drawCircle(baseCenter, outerRadius, baseBorder);
+    canvas.drawCircle(
+      baseCenter,
+      outerRadius * 0.42,
+      Paint()
+        ..color = const Color(0xFF00E5FF).withValues(alpha: 0.18 * masterAlpha)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
 
-    final Paint tickPaint = Paint()
-      ..color = const Color(0xFF00F0FF).withValues(alpha: 0.45)
+    final Paint segmentPaint = Paint()
+      ..color = const Color(0xFF80D8FF).withValues(alpha: 0.48 * masterAlpha)
+      ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
     for (int i = 0; i < 4; i++) {
-      final double a = i * (math.pi / 2);
-      canvas.drawLine(
-        baseCenter + Offset(math.cos(a), math.sin(a)) * (outerRadius - 10),
-        baseCenter + Offset(math.cos(a), math.sin(a)) * (outerRadius - 4),
-        tickPaint,
-      );
+      final double startA = i * (math.pi * 0.5) - math.pi * 0.18;
+      canvas.drawArc(baseRect, startA, math.pi * 0.36, false, segmentPaint);
     }
 
-    if (origin != null) {
-      canvas.drawLine(
-        baseCenter,
-        knobCenter,
+    for (int i = 0; i < 4; i++) {
+      final double a = i * (math.pi * 0.5);
+      final Offset tip =
+          baseCenter + Offset(math.cos(a), math.sin(a)) * (outerRadius - 5.5);
+      final Offset leftWing = baseCenter +
+          Offset(math.cos(a - 0.13), math.sin(a - 0.13)) *
+              (outerRadius - 11.5);
+      final Offset rightWing = baseCenter +
+          Offset(math.cos(a + 0.13), math.sin(a + 0.13)) *
+              (outerRadius - 11.5);
+
+      final Path chevron = Path()
+        ..moveTo(leftWing.dx, leftWing.dy)
+        ..lineTo(tip.dx, tip.dy)
+        ..lineTo(rightWing.dx, rightWing.dy)
+        ..close();
+
+      canvas.drawPath(
+        chevron,
         Paint()
-          ..color = const Color(0xFF00E5FF).withValues(alpha: 0.45)
-          ..strokeWidth = 3.0,
+          ..color =
+              const Color(0xFF00F0FF).withValues(alpha: 0.55 * masterAlpha)
+          ..style = PaintingStyle.fill,
       );
     }
 
-    final Paint knobPaint = Paint()
-      ..shader = const RadialGradient(
-        colors: [
-          Color(0xFF80D8FF),
-          Color(0xFF00E5FF),
-          Color(0xFF006064),
-        ],
-      ).createShader(Rect.fromCircle(center: knobCenter, radius: innerRadius));
-    canvas.drawCircle(knobCenter, innerRadius, knobPaint);
+    if (isActive && dragRatio > 0.08) {
+      final Paint glowArcPaint = Paint()
+        ..color = const Color(0xFF00F0FF).withValues(alpha: 0.55 * dragRatio)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5.0
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      canvas.drawArc(
+        Rect.fromCircle(center: baseCenter, radius: outerRadius + 1.5),
+        dragAngle - 0.52,
+        1.04,
+        false,
+        glowArcPaint,
+      );
+
+      final Paint coreArcPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.9 * dragRatio)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(
+        Rect.fromCircle(center: baseCenter, radius: outerRadius + 1.5),
+        dragAngle - 0.42,
+        0.84,
+        false,
+        coreArcPaint,
+      );
+
+      final Offset pointerTip = baseCenter +
+          Offset(math.cos(dragAngle), math.sin(dragAngle)) *
+              (outerRadius + 11.0);
+      final Offset pLeft = baseCenter +
+          Offset(math.cos(dragAngle - 0.14), math.sin(dragAngle - 0.14)) *
+              (outerRadius + 4.0);
+      final Offset pRight = baseCenter +
+          Offset(math.cos(dragAngle + 0.14), math.sin(dragAngle + 0.14)) *
+              (outerRadius + 4.0);
+      final Path pointerPath = Path()
+        ..moveTo(pointerTip.dx, pointerTip.dy)
+        ..lineTo(pLeft.dx, pLeft.dy)
+        ..lineTo(pRight.dx, pRight.dy)
+        ..close();
+      canvas.drawPath(
+        pointerPath,
+        Paint()..color = const Color(0xFF00F0FF).withValues(alpha: dragRatio),
+      );
+
+      final Offset perp = Offset(-math.sin(dragAngle), math.cos(dragAngle));
+      final Path beamPath = Path()
+        ..moveTo(baseCenter.dx + perp.dx * 4.0, baseCenter.dy + perp.dy * 4.0)
+        ..lineTo(
+            knobCenter.dx + perp.dx * 11.0, knobCenter.dy + perp.dy * 11.0)
+        ..lineTo(
+            knobCenter.dx - perp.dx * 11.0, knobCenter.dy - perp.dy * 11.0)
+        ..lineTo(baseCenter.dx - perp.dx * 4.0, baseCenter.dy - perp.dy * 4.0)
+        ..close();
+      canvas.drawPath(
+        beamPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment(-math.cos(dragAngle), -math.sin(dragAngle)),
+            end: Alignment(math.cos(dragAngle), math.sin(dragAngle)),
+            colors: const [Color(0x0000E5FF), Color(0x5500E5FF)],
+          ).createShader(baseRect),
+      );
+    }
+
+    canvas.drawCircle(
+      knobCenter + const Offset(0, 3),
+      innerRadius,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.55 * masterAlpha)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0),
+    );
+
+    final Rect knobRect =
+        Rect.fromCircle(center: knobCenter, radius: innerRadius);
+    canvas.drawCircle(
+      knobCenter,
+      innerRadius,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.3, -0.35),
+          radius: 0.95,
+          colors: [
+            const Color(0xFF1A4B7C).withValues(alpha: masterAlpha),
+            const Color(0xFF071D38).withValues(alpha: masterAlpha),
+            const Color(0xFF020A16).withValues(alpha: masterAlpha),
+          ],
+        ).createShader(knobRect),
+    );
 
     canvas.drawCircle(
       knobCenter,
       innerRadius,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.85)
+        ..color = const Color(0xFF00F0FF).withValues(alpha: 0.9 * masterAlpha)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+        ..strokeWidth = 2.0,
+    );
+
+    canvas.drawCircle(
+      knobCenter,
+      innerRadius * 0.48,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.white.withValues(alpha: masterAlpha),
+            const Color(0xFF00E5FF).withValues(alpha: 0.9 * masterAlpha),
+            const Color(0xFF00838F).withValues(alpha: 0.6 * masterAlpha),
+          ],
+        ).createShader(
+          Rect.fromCircle(center: knobCenter, radius: innerRadius * 0.48),
+        ),
+    );
+
+    canvas.drawArc(
+      Rect.fromCircle(center: knobCenter, radius: innerRadius - 3.5),
+      -math.pi * 0.8,
+      math.pi * 0.6,
+      false,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.45 * masterAlpha)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round,
     );
   }
 
   @override
   bool shouldRepaint(covariant _VirtualJoystickPainter oldDelegate) {
     return oldDelegate.origin != origin || oldDelegate.current != current;
+  }
+}
+
+/// Vòng cung tiến trình Kinh Nghiệm (EXP Ring) ôm quanh viền Avatar tròn
+class _AvatarExpRingPainter extends CustomPainter {
+  final double expRatio;
+  final bool frenzy;
+
+  _AvatarExpRingPainter({
+    required this.expRatio,
+    required this.frenzy,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset center = Offset(size.width * 0.5, size.height * 0.5);
+    final double radius = size.width * 0.5 - 2.0;
+
+    final Paint trackPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.65)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2;
+    canvas.drawCircle(center, radius, trackPaint);
+
+    final Paint innerRim = Paint()
+      ..color = Colors.white.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(center, radius - 1.8, innerRim);
+
+    final double sweep = (expRatio.clamp(0.0, 1.0)) * math.pi * 2;
+    if (sweep > 0.01) {
+      final Rect rect = Rect.fromCircle(center: center, radius: radius);
+      final Paint arcPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          colors: frenzy
+              ? const [Color(0xFFFF1744), Color(0xFFFF9100), Color(0xFFFF1744)]
+              : const [Color(0xFFFF8F00), Color(0xFFFFEA00), Color(0xFFFFD740)],
+        ).createShader(rect);
+      canvas.drawArc(rect, -math.pi * 0.5, sweep, false, arcPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AvatarExpRingPainter oldDelegate) {
+    return oldDelegate.expRatio != expRatio || oldDelegate.frenzy != frenzy;
   }
 }
