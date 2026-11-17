@@ -16,6 +16,7 @@ import 'settings_screen.dart';
 import 'battle_screen.dart';
 import 'video_screen.dart';
 import 'story_list_screen.dart';
+import 'shark_game_screen.dart';
 import '../widgets/cached_video_player.dart';
 import '../widgets/rating_dialog.dart';
 
@@ -33,6 +34,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   
   double _currentDepth = 0.0;
   int _activeMediaTab = 0; // 0 for Image, 1 for Video
+  int _selectedCategoryFilter = 0; // 0: Tất cả, 1: Thực tế, 2: Tàu lặn, 3: Xác tàu & Thần thoại
+  double _horizontalDragDistance = 0.0; // Khoảng cách vuốt ngang để đổi tab category
+  bool _isMenuVisible = true; // Trạng thái ẩn/hiện các nút menu HUD ở hai bên lề
   final List<_BubbleParticle> _particles = [];
   final List<_MarineSnowParticle> _marineSnowParticles = [];
   final List<_BioluminescentJellyfish> _jellyfishes = [];
@@ -500,20 +504,96 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _effectsTicker.value++;
   }
 
+  double _calculateDepthFromScroll({
+    required double currentOffset,
+    required double maxScroll,
+    required double viewportDimension,
+    required List<Creature> filtered,
+  }) {
+    // 1. Khi đang ở trên mặt nước (bầu trời / tiêu đề <= 550px)
+    if (currentOffset <= 550.0) {
+      return 0.0;
+    }
+
+    if (filtered.isEmpty) {
+      if (maxScroll <= 550.0) return 0.0;
+      final underwaterProgress = ((currentOffset - 550.0) / (maxScroll - 550.0)).clamp(0.0, 1.0);
+      return underwaterProgress * 11000.0;
+    }
+
+    // Các thành phần cố định nằm trước danh sách thẻ sinh vật:
+    // Atmospheric Header (640.0) + Category Selector (289.0) + Media Tab Selector (76.0)
+    const double listStartOffset = 640.0 + 289.0 + 76.0; // 1005.0
+    const double itemExtent = 414.0; // Chiều cao thẻ sinh vật 390.0 + margin dọc 24.0
+    const double cardCenterRelative = itemExtent / 2; // 207.0
+
+    // Điểm ngắm tiêu điểm trên màn hình (focal line): khoảng 42% chiều cao màn hình từ trên xuống
+    // Vị trí người dùng tự nhiên nhìn vào thông tin thẻ sinh vật
+    final double focalLine = viewportDimension * 0.42;
+    final double focalOffset = currentOffset + focalLine;
+
+    final double firstCardCenter = listStartOffset + cardCenterRelative;
+    final double firstDepth = filtered.first.minDepth.toDouble();
+
+    // 2. Giai đoạn lặn từ mặt nước (550px) xuống thẻ sinh vật đầu tiên
+    if (focalOffset < firstCardCenter) {
+      final double surfaceFocalOffset = 550.0 + focalLine;
+      if (focalOffset <= surfaceFocalOffset) {
+        return 0.0;
+      }
+      final double span = firstCardCenter - surfaceFocalOffset;
+      if (span <= 0) return firstDepth;
+      final double t = ((focalOffset - surfaceFocalOffset) / span).clamp(0.0, 1.0);
+      return t * firstDepth;
+    }
+
+    final double lastCardCenter = listStartOffset + (filtered.length - 1) * itemExtent + cardCenterRelative;
+    final double lastDepth = filtered.last.minDepth.toDouble();
+
+    // 3. Giai đoạn người dùng đang duyệt qua danh sách các sinh vật
+    // Độ sâu được nội suy mượt mà trực tiếp theo các sinh vật đang hiển thị trong tầm mắt
+    if (focalOffset <= lastCardCenter) {
+      final double floatIndex = (focalOffset - firstCardCenter) / itemExtent;
+      final int index = floatIndex.floor().clamp(0, filtered.length - 1);
+      final double frac = (floatIndex - index).clamp(0.0, 1.0);
+
+      if (index >= filtered.length - 1) {
+        return lastDepth;
+      }
+
+      final double depthA = filtered[index].minDepth.toDouble();
+      final double depthB = filtered[index + 1].minDepth.toDouble();
+      return depthA + (depthB - depthA) * frac;
+    }
+
+    // 4. Giai đoạn vượt qua sinh vật cuối cùng để tiến vào rãnh Mariana sâu nhất (11.000m)
+    final double trenchStartOffset = lastCardCenter - focalLine;
+    if (maxScroll <= trenchStartOffset) {
+      return 11000.0;
+    }
+    final double trenchProgress = ((currentOffset - trenchStartOffset) / (maxScroll - trenchStartOffset)).clamp(0.0, 1.0);
+    return (lastDepth + (11000.0 - lastDepth) * trenchProgress).clamp(0.0, 11000.0);
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentOffset = _scrollController.offset;
+    final viewportDimension = _scrollController.position.viewportDimension;
     
+    final dataService = Provider.of<DataService>(context, listen: false);
+    final filtered = _getFilteredCreatures(dataService.creatures);
+
+    final double newDepth = _calculateDepthFromScroll(
+      currentOffset: currentOffset,
+      maxScroll: maxScroll,
+      viewportDimension: viewportDimension,
+      filtered: filtered,
+    );
+
     setState(() {
-      // Độ sâu chỉ bắt đầu tăng khi đi qua mặt nước (offset 550px)
-      if (currentOffset <= 550.0) {
-        _currentDepth = 0.0;
-      } else {
-        double underwaterProgress = ((currentOffset - 550.0) / (maxScroll - 550.0)).clamp(0.0, 1.0);
-        _currentDepth = underwaterProgress * 11000.0; // 0m to 11000m
-      }
+      _currentDepth = newDepth;
     });
 
     // Dynamically play ambient sounds based on depth zones
@@ -779,10 +859,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00F0FF)),
                   ),
                 )
-              : CustomScrollView(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
+              : GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragStart: (_) => _horizontalDragDistance = 0.0,
+                  onHorizontalDragUpdate: (details) {
+                    _horizontalDragDistance += details.primaryDelta ?? 0.0;
+                  },
+                  onHorizontalDragEnd: _handleHorizontalSwipeEnd,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
                     // Atmospheric Header
                     // Redesigned Sky-to-Sea Transition Header
                     SliverToBoxAdapter(
@@ -830,21 +917,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ),
                             ),
 
-                            // 2. Clouds
+                            // 2. Clouds (Trôi vòng lặp mượt mà dùng chung _particleController, tối ưu GPU & pin)
                             Positioned(
-                              top: 110,
-                              left: -20,
-                              child: _buildCloud(170, 60, 0.85),
-                            ),
-                            Positioned(
-                              top: 80,
-                              right: 120,
-                              child: _buildCloud(130, 45, 0.7),
-                            ),
-                            Positioned(
-                              top: 170,
-                              right: -30,
-                              child: _buildCloud(190, 75, 0.8),
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: 280,
+                              child: IgnorePointer(
+                                child: RepaintBoundary(
+                                  child: AnimatedBuilder(
+                                    animation: _particleController,
+                                    builder: (context, _) {
+                                      // Chỉ render mây trôi khi người dùng đang ở gần mặt nước/bầu trời
+                                      if (_scrollController.hasClients && _scrollController.offset > 600.0) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return CustomPaint(
+                                        painter: _DriftingCloudsPainter(
+                                          progress: _particleController.value,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
                             ),
 
                             // 3. Seagulls Flying in the Sky (Dynamic Flapping & Flocks)
@@ -1019,19 +1115,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ),
 
+                    // Category Filter Selector for Real, Submersibles, Shipwrecks, and Myth
+                    SliverToBoxAdapter(
+                      child: _buildCategoryFilterSelector(),
+                    ),
+
                     // Media Tab Selector for Image vs Video
                     SliverToBoxAdapter(
                       child: _buildMediaTabSelector(),
                     ),
                     // List of Creature cards mapped by depth
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final creature = dataService.creatures[index];
-                          return _buildCreatureItem(creature);
-                        },
-                        childCount: dataService.creatures.length,
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final filtered = _getFilteredCreatures(dataService.creatures);
+                        return SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final creature = filtered[index];
+                              return _buildCreatureItem(creature);
+                            },
+                            childCount: filtered.length,
+                          ),
+                        );
+                      },
                     ),
 
                     // Bottom Mariana Trench zone
@@ -1050,6 +1156,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                   ],
                 ),
+              ),
 
           IgnorePointer(
             child: RepaintBoundary(
@@ -1114,159 +1221,338 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
 
 
-          // 3. Floating HUD: Depth Meter
+          // 3. Floating HUD: Depth Meter & Menu Toggle Button
           Positioned(
             right: 16.0,
             top: MediaQuery.of(context).padding.top + 16.0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(20.0),
-                border: Border.all(
-                  color: const Color(0xFF00F0FF).withValues(alpha: 0.4),
-                  width: 1.0,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/images/icon/diving.png',
-                    width: 24,
-                    height: 24,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    "${_currentDepth.toStringAsFixed(0)} m",
-                    style: const TextStyle(
-                      color: Color(0xFF00F0FF),
-                      fontSize: 15.0,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Nút chuyển đổi ẩn / hiện Menu ở 2 bên mép màn hình
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    setState(() {
+                      _isMenuVisible = !_isMenuVisible;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(7.0),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF020B1A).withValues(alpha: 0.65),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _isMenuVisible
+                            ? const Color(0xFF00F0FF).withValues(alpha: 0.5)
+                            : const Color(0xFFFF3366).withValues(alpha: 0.6),
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isMenuVisible ? const Color(0xFF00F0FF) : const Color(0xFFFF3366))
+                              .withValues(alpha: 0.25),
+                          blurRadius: 8.0,
+                          spreadRadius: 1.0,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      _isMenuVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      color: _isMenuVisible ? const Color(0xFF00F0FF) : const Color(0xFFFF3366),
+                      size: 18.0,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/images/icon/diving.png',
+                        width: 24,
+                        height: 24,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "${_currentDepth.toStringAsFixed(0)} m",
+                        style: const TextStyle(
+                          color: Color(0xFF00F0FF),
+                          fontSize: 15.0,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                          shadows: [
+                            Shadow(
+                              color: Color(0xFF00F0FF),
+                              blurRadius: 8.0,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 
           // 4. Floating HUD: Audio Ambient Controller (Scale 0.8 - Icon 26x26)
-          Positioned(
-            left: 8.0,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            left: _isMenuVisible ? 8.0 : -90.0,
             top: MediaQuery.of(context).padding.top + 16.0,
-            child: _BalloonHUDButton(
-              animation: _particleController,
-              phaseOffset: 0.0,
-              gradientColors: soundService.isMuted
-                  ? [const Color(0xFFFF3366), const Color(0xFF880E4F)]
-                  : [const Color(0xFF00E5FF), const Color(0xFF006064)],
-              borderColor: soundService.isMuted ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
-              onTap: () => soundService.toggleMute(),
-              scale: 0.8,
-              child: Opacity(
-                opacity: soundService.isMuted ? 0.4 : 1.0,
-                child: Image.asset(
-                  'assets/images/icon/medium-volume.png',
-                  width: 26,
-                  height: 26,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 0.0,
+                  gradientColors: soundService.isMuted
+                      ? [const Color(0xFFFF3366), const Color(0xFF880E4F)]
+                      : [const Color(0xFF00E5FF), const Color(0xFF006064)],
+                  borderColor: soundService.isMuted ? const Color(0xFFFF3366) : const Color(0xFF00F0FF),
+                  onTap: () => soundService.toggleMute(),
+                  scale: 0.8,
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: soundService.isMuted ? 0.45 : 1.0,
+                          child: Image.asset(
+                            'assets/images/icon/medium-volume.png',
+                            width: 26,
+                            height: 26,
+                          ),
+                        ),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(
+                            begin: 0.0,
+                            end: soundService.isMuted ? 1.0 : 0.0,
+                          ),
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, slashProgress, _) {
+                            if (slashProgress <= 0.01) {
+                              return const SizedBox.shrink();
+                            }
+                            return CustomPaint(
+                              size: const Size(28, 28),
+                              painter: _MuteSlashPainter(progress: slashProgress),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
 
           // 4b. Floating HUD: Dashboard Control Console Button - Thuyền (Scale 1.45 - Icon 52x52)
-          Positioned(
-            right: 8.0,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            right: _isMenuVisible ? 8.0 : -100.0,
             top: MediaQuery.of(context).padding.top + 72.0,
-            child: _BalloonHUDButton(
-              animation: _particleController,
-              phaseOffset: 1.5,
-              gradientColors: const [Color(0xFF00B0FF), Color(0xFF2962FF)],
-              borderColor: const Color(0xFF00F0FF),
-              onTap: () => _navigateTo(const DashboardScreen()),
-              scale: 1.45,
-              child: Image.asset(
-                'assets/images/icon/cruise.png',
-                width: 52,
-                height: 52,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 1.5,
+                  gradientColors: const [Color(0xFF00B0FF), Color(0xFF2962FF)],
+                  borderColor: const Color(0xFF00F0FF),
+                  onTap: () => _navigateTo(const DashboardScreen()),
+                  scale: 1.45,
+                  child: Image.asset(
+                    'assets/images/icon/cruise.png',
+                    width: 52,
+                    height: 52,
+                  ),
+                ),
               ),
             ),
           ),
 
           // 4c. Floating HUD: Settings Button - Cài đặt (Scale 0.8 - Icon 26x26)
-          Positioned(
-            left: 8.0,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            left: _isMenuVisible ? 8.0 : -90.0,
             top: MediaQuery.of(context).padding.top + 115.0,
-            child: _BalloonHUDButton(
-              animation: _particleController,
-              phaseOffset: 3.0,
-              gradientColors: const [Color(0xFF00E676), Color(0xFF00796B)],
-              borderColor: const Color(0xFF00F0FF),
-              onTap: () => openSettings(context),
-              scale: 0.8,
-              child: Image.asset(
-                'assets/images/icon/settings.png',
-                width: 26,
-                height: 26,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 3.0,
+                  gradientColors: const [Color(0xFF00E676), Color(0xFF00796B)],
+                  borderColor: const Color(0xFF00F0FF),
+                  onTap: () => openSettings(context),
+                  scale: 0.8,
+                  child: Image.asset(
+                    'assets/images/icon/settings.png',
+                    width: 26,
+                    height: 26,
+                  ),
+                ),
               ),
             ),
           ),
 
           // 4d. Floating HUD: Battle Mode Button - Thách đấu (Scale 0.8 - Icon 26x26)
-          Positioned(
-            left: 8.0,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            left: _isMenuVisible ? 8.0 : -90.0,
             top: MediaQuery.of(context).padding.top + 215.0,
-            child: _BalloonHUDButton(
-              animation: _particleController,
-              phaseOffset: 4.5,
-              gradientColors: const [Color(0xFFFF3366), Color(0xFFC2185B)],
-              borderColor: const Color(0xFFFF3366),
-              onTap: () => _navigateTo(const BattleScreen()),
-              scale: 0.8,
-              child: Image.asset(
-                'assets/images/icon/dragon.png',
-                width: 26,
-                height: 26,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 4.5,
+                  gradientColors: const [Color(0xFFFF3366), Color(0xFFC2185B)],
+                  borderColor: const Color(0xFFFF3366),
+                  onTap: () => _navigateTo(const BattleScreen()),
+                  scale: 0.8,
+                  child: Image.asset(
+                    'assets/images/icon/dragon.png',
+                    width: 26,
+                    height: 26,
+                  ),
+                ),
               ),
             ),
           ),
 
           // 4e. Floating HUD: Creature Battle Videos Button - Rồng (Scale 1.85 - Icon 56x56)
-          Positioned(
-            right: 8.0,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            right: _isMenuVisible ? 8.0 : -110.0,
             top: MediaQuery.of(context).padding.top + 215.0,
-            child: _BalloonHUDButton(
-              animation: _particleController,
-              phaseOffset: 6.0,
-              gradientColors: const [Color(0xFFE91E63), Color(0xFF9C27B0)],
-              borderColor: const Color(0xFF00F0FF),
-              onTap: () => _navigateTo(const VideoScreen()),
-              scale: 1.85,
-              isLava: true,
-              child: Image.asset(
-                _videoIcon,
-                width: 56,
-                height: 56,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 6.0,
+                  gradientColors: const [Color(0xFFE91E63), Color(0xFF9C27B0)],
+                  borderColor: const Color(0xFF00F0FF),
+                  onTap: () => _navigateTo(const VideoScreen()),
+                  scale: 1.85,
+                  isLava: true,
+                  child: Image.asset(
+                    _videoIcon,
+                    width: 56,
+                    height: 56,
+                  ),
+                ),
               ),
             ),
           ),
 
           // 4f. Floating HUD: Sailor Stories Button - Chuyện Thủy Thủ (Scale 1.35 - Icon 44x44)
-          Positioned(
-            right: 8.0,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            right: _isMenuVisible ? 8.0 : -100.0,
             top: MediaQuery.of(context).padding.top + 345.0,
-            child: _BalloonHUDButton(
-              animation: _particleController,
-              phaseOffset: 7.5,
-              gradientColors: const [Color(0xFFFFB300), Color(0xFFFF6F00)],
-              borderColor: const Color(0xFFFFD54F),
-              onTap: () => _navigateTo(const StoryListScreen()),
-              scale: 1.35,
-              child: Image.asset(
-                'assets/images/icon/pirate-hat.png',
-                width: 44,
-                height: 44,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 7.5,
+                  gradientColors: const [Color(0xFFFFB300), Color(0xFFFF6F00)],
+                  borderColor: const Color(0xFFFFD54F),
+                  onTap: () => _navigateTo(const StoryListScreen()),
+                  scale: 1.35,
+                  child: Image.asset(
+                    'assets/images/icon/pirate-hat.png',
+                    width: 44,
+                    height: 44,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 4g. Floating HUD: Shark Apex Hunt Mini-Game Button - Cá Lớn Nuốt Cá Bé (Scale 1.35)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            left: _isMenuVisible ? 8.0 : -100.0,
+            top: MediaQuery.of(context).padding.top + 315.0,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _isMenuVisible ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isMenuVisible,
+                child: _BalloonHUDButton(
+                  animation: _particleController,
+                  phaseOffset: 5.2,
+                  gradientColors: const [Color(0xFF00E5FF), Color(0xFFFF1744)],
+                  borderColor: const Color(0xFF00F0FF),
+                  onTap: () => _navigateTo(const SharkGameScreen()),
+                  scale: 1.35,
+                  isLava: true,
+                  child: Stack(
+                    alignment: Alignment.bottomCenter,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Image.asset(
+                          'assets/images/creatures/great_white_shark.png',
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 1,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF1744),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.white, width: 0.7),
+                          ),
+                          child: const Text(
+                            'GAME',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 7.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -1287,35 +1573,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       scrollOffset = _scrollController.offset;
     }
     
-    // Wave surface starts at 550px from the top of the header.
-    // Its position on the screen is (550 - scrollOffset).
-    double waterSurfaceScreenY = 550.0 - scrollOffset;
-    
+    // Mặt biển nằm ở mốc 550px tính từ đỉnh Header.
+    // Chỉ hiển thị thợ lặn khi người dùng đã cuộn xuống dưới mặt biển (scrollOffset > 550.0).
     double diverY;
     double opacity;
     
-    if (waterSurfaceScreenY > 120.0) {
-      // Water surface is still on screen (bottom half)
-      // Position the diver just below the waves
-      diverY = waterSurfaceScreenY + 25.0;
-      
-      // Fade in the diver as we scroll down towards the water
-      opacity = (scrollOffset / 150.0).clamp(0.0, 1.0);
+    if (scrollOffset <= 550.0) {
+      // Đang ở trên mặt biển (bầu trời / sóng nước): Ẩn hoàn toàn thợ lặn
+      diverY = (550.0 - scrollOffset) + 40.0;
+      opacity = 0.0;
     } else {
-      // Water surface has moved off-screen (above y=120)
-      // Diver descends dynamically based on scroll progress
+      // Đã lặn xuống dưới mặt biển (scrollOffset > 550.0)
       double minDiverY = 120.0;
       double maxDiverY = screenHeight - 220.0;
       
-      // Calculate progress of scroll after water has covered the screen
       double maxScroll = _scrollController.hasClients ? _scrollController.position.maxScrollExtent : 1.0;
       double underwaterScrollProgress = 0.0;
-      if (maxScroll > 410.0) {
-        underwaterScrollProgress = ((scrollOffset - 410.0) / (maxScroll - 410.0)).clamp(0.0, 1.0);
+      if (maxScroll > 550.0) {
+        underwaterScrollProgress = ((scrollOffset - 550.0) / (maxScroll - 550.0)).clamp(0.0, 1.0);
       }
       
       diverY = minDiverY + (maxDiverY - minDiverY) * underwaterScrollProgress;
-      opacity = 1.0;
+      // Hiện dần mượt mà ngay khi bắt đầu lặn qua mặt nước (từ 550px -> 700px)
+      opacity = ((scrollOffset - 550.0) / 150.0).clamp(0.0, 1.0);
     }
     
     return Positioned(
@@ -1369,65 +1649,442 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildCloud(double width, double height, double opacity) {
-    return Opacity(
-      opacity: opacity,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              bottom: 0,
-              left: width * 0.1,
-              right: width * 0.1,
-              child: Container(
-                height: height * 0.5,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(height * 0.5),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              left: width * 0.25,
-              child: Container(
-                width: height * 0.9,
-                height: height * 0.9,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              left: width * 0.12,
-              child: Container(
-                width: height * 0.65,
-                height: height * 0.65,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              right: width * 0.15,
-              child: Container(
-                width: height * 0.6,
-                height: height * 0.6,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ],
+  void _switchCategoryFilter(int newIndex) {
+    if (_selectedCategoryFilter == newIndex) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _selectedCategoryFilter = newIndex;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onScroll();
+    });
+  }
+
+  void _handleHorizontalSwipeEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    // Ngưỡng nhận diện vuốt nhanh (fling) hoặc kéo ngang quãng đường đủ lớn
+    if (velocity < -250 || _horizontalDragDistance < -60) {
+      // Vuốt từ phải sang trái -> Chuyển sang tab tiếp theo (tuần hoàn 0 -> 1 -> 2 -> 3 -> 4 -> 0)
+      _switchCategoryFilter((_selectedCategoryFilter + 1) % 5);
+    } else if (velocity > 250 || _horizontalDragDistance > 60) {
+      // Vuốt từ trái sang phải -> Chuyển về tab trước đó (tuần hoàn 4 <- 3 <- 2 <- 1 <- 0)
+      _switchCategoryFilter((_selectedCategoryFilter - 1 + 5) % 5);
+    }
+    _horizontalDragDistance = 0.0;
+  }
+
+  List<Creature> _getFilteredCreatures(List<Creature> all) {
+    switch (_selectedCategoryFilter) {
+      case 1:
+        return all.where((c) => c.isReal).toList();
+      case 2:
+        return all.where((c) => c.isSubmersible).toList();
+      case 3:
+        return all.where((c) => c.isShipwreck).toList();
+      case 4:
+        return all.where((c) => c.isMyth).toList();
+      default:
+        return all;
+    }
+  }
+
+  Widget _buildCategoryFilterSelector() {
+    final strings = AppStrings.of(context);
+    final isEn = strings.languageCode == 'en';
+
+    // Bộ 5 Danh Mục với Hình Ảnh Biển Sâu Điện Ảnh & Hiệu Ứng Opacity Mờ 4 Cạnh (Vignette Feather)
+    final categories = [
+      (
+        id: 0,
+        label: isEn ? 'ALL' : 'TẤT CẢ',
+        thumbPath: 'assets/images/all2_v.png',
+        imagePath: 'assets/images/all2.png',
+        color: const Color(0xFF00F0FF),
+        title: isEn ? 'THE OCEAN ABYSS' : 'VỰC THẲM ĐẠI DƯƠNG',
+        subtitle: isEn ? 'Deep Sea Marine Biosphere' : 'Hệ sinh thái đại dương toàn cảnh',
+      ),
+      (
+        id: 1,
+        label: isEn ? 'REAL' : 'THỰC TẾ',
+        thumbPath: 'assets/images/real_v.png',
+        imagePath: 'assets/images/real.png',
+        color: const Color(0xFF00FFB2),
+        title: isEn ? 'REAL SPECIES' : 'SINH VẬT THỰC TẾ',
+        subtitle: isEn ? 'Living Marine Wildlife' : 'Thế giới sinh vật biển kỳ thú',
+      ),
+      (
+        id: 2,
+        label: isEn ? 'SUBS' : 'TÀU LẶN',
+        thumbPath: 'assets/images/category_subs_epic_v.jpg',
+        imagePath: 'assets/images/category_subs_epic.jpg',
+        color: const Color(0xFFFFB800),
+        title: isEn ? 'SUBMERSIBLES' : 'TÀU LẶN THÁM HIỂM',
+        subtitle: isEn ? 'Deep Exploration Submersibles' : 'Phương tiện thám hiểm biển sâu',
+      ),
+      (
+        id: 3,
+        label: isEn ? 'WRECKS' : 'XÁC TÀU',
+        thumbPath: 'assets/images/category_wrecks_epic_v.jpg',
+        imagePath: 'assets/images/category_wrecks_epic.jpg',
+        color: const Color(0xFF70C5FF),
+        title: isEn ? 'HISTORIC WRECKS' : 'XÁC TÀU LỊCH SỬ',
+        subtitle: isEn ? 'Titanic Historic Relic' : 'Kỳ quan di tích xác tàu lịch sử',
+      ),
+      (
+        id: 4,
+        label: isEn ? 'TITAN' : 'TITAN',
+        thumbPath: 'assets/images/category_titan_epic_v.jpg',
+        imagePath: 'assets/images/category_titan_epic.jpg',
+        color: const Color(0xFFFF3366),
+        title: isEn ? 'MYTH & TITANS' : 'THẦN THOẠI & TITAN',
+        subtitle: isEn ? 'Mythical Creatures & Monsters' : 'Thủy quái truyền thuyết cổ xưa',
+      ),
+    ];
+
+    final currentCat = categories[_selectedCategoryFilter.clamp(0, categories.length - 1)];
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10.0, 6.0, 10.0, 8.0),
+      height: 275.0,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(
+          begin: _selectedCategoryFilter.toDouble(),
+          end: _selectedCategoryFilter.toDouble(),
         ),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+        builder: (context, animatedIndex, child) {
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 1. Chùm tia sáng máy chiếu hologram chiếu từ nút đang chọn lên vật thể
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ProjectorBeamPainter(
+                    activeIndex: animatedIndex,
+                    totalCount: categories.length,
+                    beamColor: currentCat.color,
+                    dockHeight: 72.0,
+                  ),
+                ),
+              ),
+
+              // 2. Khu vực Hologram 3D Pop-Out Vượt Lên Trên Menu
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 48.0, // Vươn rộng và phủ tràn tự nhiên lên cạnh trên của dock
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) {
+                    final curvedAnim = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    );
+                    return FadeTransition(
+                      opacity: curvedAnim,
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.86, end: 1.0).animate(curvedAnim),
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.0, 0.10),
+                            end: Offset.zero,
+                          ).animate(curvedAnim),
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Stack(
+                    key: ValueKey<int>(currentCat.id),
+                    clipBehavior: Clip.none,
+                    fit: StackFit.expand,
+                    children: [
+                      // 1. Quầng sáng phát quang theo màu chủ đạo phía sau tâm ảnh
+                      Center(
+                        child: Container(
+                          width: 280.0,
+                          height: 195.0,
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              colors: [
+                                currentCat.color.withValues(alpha: 0.28),
+                                currentCat.color.withValues(alpha: 0.08),
+                                Colors.transparent,
+                              ],
+                              stops: const [0.0, 0.55, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // 2. Ảnh nền biển sâu điện ảnh với hiệu ứng CSS opacity mờ 4 góc trên, dưới, trái, phải
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 12.0, bottom: 4.0),
+                          child: ShaderMask(
+                            // Mờ cạnh Trái & Phải
+                            shaderCallback: (rect) {
+                              return LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: const [
+                                  Colors.transparent,
+                                  Colors.black,
+                                  Colors.black,
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.16, 0.84, 1.0],
+                              ).createShader(rect);
+                            },
+                            blendMode: BlendMode.dstIn,
+                            child: ShaderMask(
+                              // Mờ cạnh Trên & Dưới
+                              shaderCallback: (rect) {
+                                return LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: const [
+                                    Colors.transparent,
+                                    Colors.black,
+                                    Colors.black,
+                                    Colors.transparent,
+                                  ],
+                                  stops: const [0.0, 0.18, 0.82, 1.0],
+                                ).createShader(rect);
+                              },
+                              blendMode: BlendMode.dstIn,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16.0),
+                                child: Image.asset(
+                                  currentCat.imagePath,
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.center,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Thông số Telemetry HUD: Tiêu đề danh mục góc trên bên trái
+                      Positioned(
+                        top: 4.0,
+                        left: 8.0,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7.0,
+                                  height: 7.0,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: currentCat.color,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: currentCat.color,
+                                        blurRadius: 7.0,
+                                        spreadRadius: 1.2,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 7.0),
+                                Text(
+                                  currentCat.title,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8,
+                                    shadows: [
+                                      Shadow(
+                                        color: currentCat.color.withValues(alpha: 0.85),
+                                        blurRadius: 9.0,
+                                      ),
+                                      const Shadow(
+                                        color: Colors.black,
+                                        blurRadius: 5.0,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2.0),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 14.0),
+                              child: Text(
+                                currentCat.subtitle,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  fontSize: 10.0,
+                                  fontWeight: FontWeight.w500,
+                                  shadows: const [
+                                    Shadow(color: Colors.black, blurRadius: 4.0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 3. Thanh Dock Menu 5 Hộp Ở Đáy
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 72.0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xF2020814),
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
+                      width: 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.75),
+                        blurRadius: 16.0,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(5.0),
+                  child: Row(
+                    children: categories.map((cat) {
+                      final isSelected = _selectedCategoryFilter == cat.id;
+                      final catColor = cat.color;
+
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                          child: GestureDetector(
+                            onTap: () => _switchCategoryFilter(cat.id),
+                            behavior: HitTestBehavior.opaque,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 250),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12.0),
+                                border: Border.all(
+                                  color: isSelected ? catColor : Colors.white.withValues(alpha: 0.12),
+                                  width: isSelected ? 2.0 : 0.8,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: catColor.withValues(alpha: 0.55),
+                                          blurRadius: 10,
+                                          spreadRadius: 0.5,
+                                        ),
+                                      ]
+                                    : [],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10.5),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    // Ảnh dọc thật category_*_v.jpg
+                                    Image.asset(
+                                      cat.thumbPath,
+                                      fit: BoxFit.cover,
+                                    ),
+
+                                    // Lớp phủ đen làm nổi text
+                                    Container(
+                                      color: isSelected
+                                          ? Colors.black.withValues(alpha: 0.28)
+                                          : Colors.black.withValues(alpha: 0.68),
+                                    ),
+
+                                    // Đèn Emitter ở đỉnh nút khi active
+                                    if (isSelected)
+                                      Positioned(
+                                        top: 2.0,
+                                        left: 0,
+                                        right: 0,
+                                        child: Center(
+                                          child: Container(
+                                            width: 14.0,
+                                            height: 3.5,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(2.0),
+                                              color: catColor,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: catColor,
+                                                  blurRadius: 6,
+                                                  spreadRadius: 1,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                    // Tên mục ở đáy nút
+                                    Positioned(
+                                      bottom: 5.0,
+                                      left: 2.0,
+                                      right: 2.0,
+                                      child: Center(
+                                        child: Text(
+                                          cat.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.65),
+                                            fontSize: 10.5,
+                                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                                            letterSpacing: 0.4,
+                                            shadows: isSelected
+                                                ? [
+                                                    Shadow(
+                                                      color: catColor,
+                                                      blurRadius: 6.0,
+                                                    ),
+                                                    const Shadow(
+                                                      color: Colors.black,
+                                                      blurRadius: 4.0,
+                                                    ),
+                                                  ]
+                                                : const [
+                                                    Shadow(
+                                                      color: Colors.black,
+                                                      blurRadius: 3.0,
+                                                    ),
+                                                  ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1795,41 +2452,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                   ),
                 ),
-              ),
-            ),
-          ),
-
-          // 6. NÚT NHẤN KHÁM PHÁ / QUÉT TỐI GIẢN (Đặt căn giữa phía dưới)
-          Positioned(
-            left: 0.0,
-            right: 0.0,
-            bottom: 20.0,
-            child: GestureDetector(
-              onTap: () => _handleCardTap(creature),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(10.0),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: themeColor.withValues(alpha: 0.6),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: themeColor.withValues(alpha: 0.25),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    creature.isLocked ? Icons.lock_outline : Icons.radar_outlined,
-                    color: themeColor,
-                    size: 20.0,
-                  ),
-                ).animateGlowing(),
               ),
             ),
           ),
@@ -3704,12 +4326,22 @@ class _BalloonHUDButton extends StatelessWidget {
                       alignment: Alignment.center,
                       clipBehavior: Clip.none,
                       children: [
+                        // Hiệu ứng viền tròn dung nham xoay chuyển khi isLava = true
+                        if (isLava)
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _LavaPainter(
+                                animationValue: animation.value,
+                              ),
+                            ),
+                          ),
                         // Icon Container
                         Container(
                           width: balloonSize,
                           height: balloonSize,
                           decoration: isLava
                               ? const BoxDecoration(
+                                  shape: BoxShape.circle,
                                   color: Colors.transparent,
                                 )
                               : BoxDecoration(
@@ -3726,21 +4358,6 @@ class _BalloonHUDButton extends StatelessWidget {
                             child: child,
                           ),
                         ),
-                        // Glowing Lava Bar at the bottom of the icon
-                        if (isLava)
-                          Positioned(
-                            bottom: -4,
-                            left: 0,
-                            right: 0,
-                            child: SizedBox(
-                              height: 12,
-                              child: CustomPaint(
-                                painter: _LavaPainter(
-                                  animationValue: animation.value,
-                                ),
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -3846,59 +4463,47 @@ class _LavaPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double w = size.width;
     final double h = size.height;
-    
-    // Wave calculations using sine waves shifting over time (boiling/rippling effect)
+    final Offset center = Offset(w / 2, h / 2);
+    final double radius = math.min(w, h) / 2 - 1.5;
+    final Rect rect = Rect.fromCircle(center: center, radius: radius);
+
+    // Góc xoay dòng chảy dung nham quanh viền tròn
     final double angle = animationValue * 2 * math.pi;
-    
-    // Generate organic wavy path
-    final path = Path();
-    path.moveTo(0, h);
-    path.lineTo(0, h * 0.55);
-    
-    // Create multiple organic liquid wave points
-    final double y1 = h * 0.5 + math.sin(angle * 4.0) * 1.5;
-    final double y2 = h * 0.35 + math.cos(angle * 2.5) * 2.2;
-    final double y3 = h * 0.55 + math.sin(angle * 5.0) * 1.2;
-    
-    path.quadraticBezierTo(w * 0.25, y1, w * 0.5, y2);
-    path.quadraticBezierTo(w * 0.75, y3, w, h * 0.45);
-    path.lineTo(w, h);
-    path.close();
+    final double pulse = 0.5 + 0.5 * math.sin(angle * 3.0);
 
-    // 1. Draw Deep Orange Glowing Shadow
-    final Paint glowPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = const Color(0xFFFF3D00).withValues(alpha: 0.7)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 5.0 + math.sin(angle * 3.0) * 1.5);
-    canvas.drawPath(path, glowPaint);
+    // 1. Hào quang dung nham đỏ cam tỏa nhiệt quanh viền tròn
+    final Paint outerGlow = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.2 + pulse * 1.4
+      ..color = const Color(0xFFFF3D00).withValues(alpha: 0.55 + pulse * 0.2)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.5 + pulse * 2.0);
+    canvas.drawCircle(center, radius, outerGlow);
 
-    // 2. Draw Yellow Hot Center Glow
-    final Paint coreGlow = Paint()
-      ..style = PaintingStyle.fill
-      ..color = const Color(0xFFFFD600).withValues(alpha: 0.9)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.0);
-    canvas.drawPath(path, coreGlow);
+    // 2. Viền tròn dung nham nóng chảy xoay chuyển (SweepGradient)
+    final Paint lavaBorderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..shader = SweepGradient(
+        colors: const [
+          Color(0xFFFF1744), // Đỏ dung nham
+          Color(0xFFFF3D00), // Cam rực
+          Color(0xFFFF9100), // Cam sáng
+          Color(0xFFFFEA00), // Tâm vàng nóng chảy
+          Color(0xFFFF3D00), // Cam rực
+          Color(0xFFD50000), // Đỏ sẫm
+          Color(0xFFFF1744), // Khép vòng
+        ],
+        stops: const [0.0, 0.18, 0.35, 0.5, 0.68, 0.85, 1.0],
+        transform: GradientRotation(angle * 2.0),
+      ).createShader(rect);
+    canvas.drawCircle(center, radius, lavaBorderPaint);
 
-    // 3. Draw Liquid Gradient Body
-    final Paint lavaPaint = Paint()
-      ..style = PaintingStyle.fill;
-    
-    final rect = Rect.fromLTWH(0, 0, w, h);
-    // Flow shift shifts the gradient sideways for a fluid moving effect
-    final double shift = math.sin(angle * 1.5) * 0.15;
-    lavaPaint.shader = LinearGradient(
-      colors: const [
-        Color(0xFFFF1744), // Molten red
-        Color(0xFFFF3D00), // Lava orange
-        Color(0xFFFF9100), // Bright orange
-        Color(0xFFFFEA00), // Glowing yellow
-        Color(0xFFFF3D00), // Lava orange
-      ],
-      begin: Alignment(-1.0 + shift, 0.0),
-      end: Alignment(1.0 + shift, 0.0),
-    ).createShader(rect);
-
-    canvas.drawPath(path, lavaPaint);
+    // 3. Điểm sáng lõi nhiệt mỏng bên trong viền
+    final Paint innerHotCore = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9
+      ..color = const Color(0xFFFFEA00).withValues(alpha: 0.45 + pulse * 0.25);
+    canvas.drawCircle(center, radius, innerHotCore);
   }
 
   @override
@@ -3906,6 +4511,285 @@ class _LavaPainter extends CustomPainter {
     return oldDelegate.animationValue != animationValue;
   }
 }
+
+/// CustomPainter vẽ chùm tia sáng máy chiếu hologram 3D
+/// Chiếu luồng sáng từ nút pod menu đang chọn tỏa lên vật thể cutout lơ lửng phía trên
+class _ProjectorBeamPainter extends CustomPainter {
+  final double activeIndex;
+  final int totalCount;
+  final Color beamColor;
+  final double dockHeight;
+
+  _ProjectorBeamPainter({
+    required this.activeIndex,
+    required this.totalCount,
+    required this.beamColor,
+    required this.dockHeight,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (totalCount <= 0) return;
+
+    // Tọa độ X của chân đèn chiếu (ngay trên đỉnh nút menu đang chọn)
+    final itemWidth = size.width / totalCount;
+    final emitterX = itemWidth * (activeIndex + 0.5);
+    final emitterY = size.height - dockHeight + 2.0;
+
+    // Điểm hội tụ chùm sáng trên sân khấu (hướng về trung tâm nhưng lệch nhẹ theo vị trí nút)
+    final targetCenterX = emitterX * 0.35 + (size.width * 0.5) * 0.65;
+    const targetY = 14.0;
+
+    // 1. Chùm sáng hình nón rộng (Volumetric Outer Cone)
+    final outerPath = Path()
+      ..moveTo(emitterX - 16.0, emitterY)
+      ..lineTo(targetCenterX - 115.0, targetY)
+      ..lineTo(targetCenterX + 115.0, targetY)
+      ..lineTo(emitterX + 16.0, emitterY)
+      ..close();
+
+    final outerPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          beamColor.withValues(alpha: 0.36),
+          beamColor.withValues(alpha: 0.12),
+          beamColor.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    canvas.drawPath(outerPath, outerPaint);
+
+    // 2. Tia sáng lõi tập trung (Intense Core Beam)
+    final innerPath = Path()
+      ..moveTo(emitterX - 7.0, emitterY)
+      ..lineTo(targetCenterX - 46.0, targetY + 12.0)
+      ..lineTo(targetCenterX + 46.0, targetY + 12.0)
+      ..lineTo(emitterX + 7.0, emitterY)
+      ..close();
+
+    final innerPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          beamColor.withValues(alpha: 0.58),
+          beamColor.withValues(alpha: 0.20),
+          beamColor.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    canvas.drawPath(innerPath, innerPaint);
+
+    // 3. Đèn LED thấu kính phát sáng tại chân chùm chiếu (Emitter Lens Glow)
+    final glowPaint = Paint()
+      ..color = beamColor
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawCircle(Offset(emitterX, emitterY), 5.5, glowPaint);
+
+    final corePaint = Paint()..color = Colors.white;
+    canvas.drawCircle(Offset(emitterX, emitterY), 2.5, corePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProjectorBeamPainter oldDelegate) {
+    return oldDelegate.activeIndex != activeIndex ||
+        oldDelegate.beamColor != beamColor ||
+        oldDelegate.dockHeight != dockHeight;
+  }
+}
+
+/// CustomPainter vẽ đường gạch chéo phát sáng khi tắt âm thanh (Mute)
+class _MuteSlashPainter extends CustomPainter {
+  final double progress;
+
+  _MuteSlashPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = progress.clamp(0.0, 1.0);
+    if (p <= 0.0) return;
+
+    const double pad = 3.5;
+    final Offset start = const Offset(pad, pad);
+    final Offset fullEnd = Offset(size.width - pad, size.height - pad);
+    final Offset currentEnd = Offset.lerp(start, fullEnd, p)!;
+
+    // 1. Viền tối cắt nền giúp gạch chéo tách biệt rõ với icon loa bên dưới
+    final Paint shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.75 * p)
+      ..strokeWidth = 5.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(start, currentEnd, shadowPaint);
+
+    // 2. Lớp phát sáng neon đỏ hồng
+    final Paint glowPaint = Paint()
+      ..color = const Color(0xFFFF3366).withValues(alpha: 0.8 * p)
+      ..strokeWidth = 4.2
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
+    canvas.drawLine(start, currentEnd, glowPaint);
+
+    // 3. Lõi gạch chéo sắc nét
+    final Paint slashPaint = Paint()
+      ..color = const Color(0xFFFF2A5F).withValues(alpha: p)
+      ..strokeWidth = 2.6
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(start, currentEnd, slashPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MuteSlashPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+/// CustomPainter vẽ các tầng mây bồng bềnh, mờ khói chân thực (Fluffy Vapor Clouds)
+/// Kết hợp:
+/// 1. Tán xạ viền mờ Gaussian Blur (MaskFilter.blur) làm tan biến các khối cứng.
+/// 2. Gradient thể tích 3D: đỉnh đón ánh nắng vàng ấm, thân trắng xốp, đáy đổ bóng xanh xám.
+/// 3. Lớp bóng đổ mềm mại (Ambient Occlusion Shadow) bên dưới đáy mây.
+/// 4. Đỉnh tụ sáng (Sunlit Highlight) tạo độ căng xốp như mây thật.
+class _DriftingCloudsPainter extends CustomPainter {
+  final double progress; // 0.0 -> 1.0 từ _particleController
+
+  _DriftingCloudsPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+
+    // 4 cụm mây phong cách cinematic tự nhiên: vị trí cao độ, kích cỡ xốp, tốc độ trôi
+    final clouds = [
+      _CloudConfig(y: 45, width: 220, height: 75, opacity: 0.88, speedFactor: 0.35, offsetPhase: 0.05),
+      _CloudConfig(y: 95, width: 270, height: 90, opacity: 0.95, speedFactor: 0.55, offsetPhase: 0.55),
+      _CloudConfig(y: 155, width: 190, height: 65, opacity: 0.78, speedFactor: 0.40, offsetPhase: 0.25),
+      _CloudConfig(y: 185, width: 310, height: 105, opacity: 0.92, speedFactor: 0.70, offsetPhase: 0.85),
+    ];
+
+    for (final c in clouds) {
+      final double totalSpan = w + c.width + 60.0;
+      final double cycle = (progress * c.speedFactor + c.offsetPhase) % 1.0;
+      final double x = cycle * totalSpan - c.width - 30.0;
+
+      _paintFluffyCloud(canvas, x, c.y, c.width, c.height, c.opacity);
+    }
+  }
+
+  void _paintFluffyCloud(Canvas canvas, double x, double y, double width, double height, double opacity) {
+    final Rect cloudRect = Rect.fromLTWH(x, y, width, height);
+    final Offset center = Offset(x + width * 0.5, y + height * 0.5);
+
+    // Hàm tạo Path mây hữu cơ nhiều múi đan xen tự nhiên
+    Path buildCloudMass(Offset offset) {
+      final path = Path();
+      final ox = offset.dx;
+      final oy = offset.dy;
+
+      // Đáy mây thoải
+      path.addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x + width * 0.12 + ox, y + height * 0.45 + oy, width * 0.76, height * 0.42),
+          Radius.circular(height * 0.22),
+        ),
+      );
+
+      // Các búi mây tròn phồng hữu cơ đan cài theo cao độ
+      final puffs = [
+        Offset(x + width * 0.22 + ox, y + height * 0.55 + oy), // Búi trái
+        Offset(x + width * 0.38 + ox, y + height * 0.35 + oy), // Búi trung-trái vươn cao
+        Offset(x + width * 0.56 + ox, y + height * 0.28 + oy), // Đỉnh chóp mây cao nhất
+        Offset(x + width * 0.74 + ox, y + height * 0.42 + oy), // Búi trung-phải
+        Offset(x + width * 0.86 + ox, y + height * 0.60 + oy), // Búi đuôi mây
+      ];
+
+      final radii = [
+        height * 0.34,
+        height * 0.46,
+        height * 0.52,
+        height * 0.44,
+        height * 0.30,
+      ];
+
+      for (int i = 0; i < puffs.length; i++) {
+        path.addOval(Rect.fromCircle(center: puffs[i], radius: radii[i]));
+      }
+
+      return path;
+    }
+
+    // 1. LỚP BÓNG ĐÁY MÂY (Ambient Occlusion Shadow) - Tạo chiều sâu 3D tách biệt với nền trời
+    final Paint shadowPaint = Paint()
+      ..color = const Color(0xFF0D47A1).withValues(alpha: 0.18 * opacity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16.0);
+    canvas.drawPath(buildCloudMass(const Offset(0, 10.0)), shadowPaint);
+
+    // 2. THÂN MÂY KHỐI (Volumetric Gradient) - Đón sáng mặt trời từ góc trên bên phải
+    final Paint bodyPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topRight,
+        end: Alignment.bottomLeft,
+        colors: [
+          Colors.white, // Đón nắng trực tiếp rực sáng
+          const Color(0xFFF0F7FF).withValues(alpha: 0.95), // Thân mây trắng dịu
+          const Color(0xFFD6E8FA).withValues(alpha: 0.88), // Bụng mây phản xạ sắc trời
+        ],
+        stops: const [0.15, 0.55, 1.0],
+      ).createShader(cloudRect)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 13.0); // Làm mềm mép tạo cảm giác hơi nước bồng bềnh
+    canvas.drawPath(buildCloudMass(Offset.zero), bodyPaint);
+
+    // 3. LÕI MÂY TRẮNG XỐP BÊN TRONG (Thêm độ đặc của hơi nước ở trung tâm)
+    final Paint corePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.55 * opacity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7.0);
+    canvas.drawPath(buildCloudMass(const Offset(0, -2.0)), corePaint);
+
+    // 4. ĐỐM SÁNG PHẢN CHIẾU ÁNH DƯƠNG (Sunlit Highlight Specular)
+    final Paint highlightPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.65 * opacity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+    canvas.drawCircle(
+      Offset(center.dx + width * 0.08, y + height * 0.32),
+      height * 0.32,
+      highlightPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DriftingCloudsPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _CloudConfig {
+  final double y;
+  final double width;
+  final double height;
+  final double opacity;
+  final double speedFactor;
+  final double offsetPhase;
+
+  const _CloudConfig({
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.opacity,
+    required this.speedFactor,
+    required this.offsetPhase,
+  });
+}
+
+
+
+
+
 
 
 

@@ -72,7 +72,7 @@ class AppStrings {
   String get moduleLogbookDesc => _isVi ? 'Giải mã lưu trữ phân tích hồ sơ sinh vật biển sâu' : 'Decoded archives & deep sea creature profiles analysis';
 
   // ── Home Screen ────────────────────────────────────────────────
-  String get homeTitle => _isVi ? 'NỖI SỢ BIỂN SÂU' : 'DEEP SEA FEAR';
+  String get homeTitle => _isVi ? 'BIỂN SÂU' : 'DEEP SEA';
   String get homeSubtitle =>
       _isVi ? 'Khám phá vực thẳm' : 'Explore the abyss';
   String get startDivePrompt => _isVi ? 'BẮT ĐẦU LẶN XUỐNG' : 'START DESCENDING';

@@ -60,7 +60,10 @@ app.*.map.json
 # Local API secrets and private data
 /api/includes/config.php
 /api/codego_users.sql
-/api/vendor/
-/api/uploads/
-api/*.mp4
-converted_videos/
+/converted_videos/
+/api/*.mp4
+/api/uploads/*
+!/api/uploads/.htaccess
+!/api/uploads/avatars/
+/api/uploads/avatars/*
+!/api/uploads/avatars/.htaccess

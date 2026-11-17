@@ -1,7 +1,10 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SoundService extends ChangeNotifier {
+  static const String _muteKey = 'sound_is_muted';
+
   late final AudioPlayer _ambientPlayer;
   late final AudioPlayer _secondaryAmbientPlayer;
   late final AudioPlayer _creaturePlayer;
@@ -9,6 +12,7 @@ class SoundService extends ChangeNotifier {
   int _pageFlipPoolIndex = 0;
 
   bool _isMuted = false;
+  Future<void>? _initFuture;
   bool _isAmbientPlaying = false;
   bool _isSecondaryAmbientPlaying = false;
   String? _currentAmbientSound;
@@ -35,11 +39,22 @@ class SoundService extends ChangeNotifier {
       p.setVolume(0.85);
       _pageFlipPool.add(p);
     }
+
+    _initFuture = _loadMuteState();
   }
 
-  // Toggles the global mute state
-  Future<void> toggleMute() async {
-    _isMuted = !_isMuted;
+  // Đọc trạng thái tắt/bật âm thanh đã lưu từ lần mở app trước
+  Future<void> _loadMuteState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isMuted = prefs.getBool(_muteKey) ?? false;
+      await _applyVolumeState();
+      notifyListeners();
+    } catch (_) {
+    }
+  }
+
+  Future<void> _applyVolumeState() async {
     if (_isMuted) {
       await _ambientPlayer.setVolume(0.0);
       await _secondaryAmbientPlayer.setVolume(0.0);
@@ -49,11 +64,24 @@ class SoundService extends ChangeNotifier {
       await _secondaryAmbientPlayer.setVolume(0.5);
       await _creaturePlayer.setVolume(0.8);
     }
+  }
+
+  // Toggles the global mute state and saves it to SharedPreferences
+  Future<void> toggleMute() async {
+    await _initFuture;
+    _isMuted = !_isMuted;
+    await _applyVolumeState();
     notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_muteKey, _isMuted);
+    } catch (_) {
+    }
   }
 
   // Plays deep ocean ambient sound
   Future<void> playAmbient(String soundFileName) async {
+    await _initFuture;
     if (_currentAmbientSound == soundFileName && _isAmbientPlaying) return;
     
     _currentAmbientSound = soundFileName;
@@ -89,6 +117,7 @@ class SoundService extends ChangeNotifier {
 
   // Plays secondary looping ambient track (e.g. sonar echo combined with deep hum)
   Future<void> playSecondaryAmbient(String soundFileName) async {
+    await _initFuture;
     if (_currentSecondaryAmbientSound == soundFileName && _isSecondaryAmbientPlaying) return;
     
     _currentSecondaryAmbientSound = soundFileName;
@@ -122,6 +151,7 @@ class SoundService extends ChangeNotifier {
 
   // Plays a specific creature sound effect
   Future<void> playCreatureSound(String soundFileName) async {
+    await _initFuture;
     if (_isMuted) return;
     if (soundFileName.isEmpty) return;
 
@@ -146,6 +176,7 @@ class SoundService extends ChangeNotifier {
 
   // Âm thanh lật trang sách cổ chân thực
   Future<void> playPageFlipSound() async {
+    await _initFuture;
     if (_isMuted || _pageFlipPool.isEmpty) return;
     try {
       final player = _pageFlipPool[_pageFlipPoolIndex];

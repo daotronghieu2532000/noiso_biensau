@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,34 +20,13 @@ class DataService extends ChangeNotifier {
   bool _isPremiumUnlocked = false;
   bool _isPremiumMonthly = false; // gói hàng tháng
 
-  // Product IDs
   static const String premiumProductId =
       'vn.io.codego.noisobiensau.premium_lifetimem';
-
-  // Trên Android Play Console là premium_month, trên iOS là premium_monthly
-  static String get monthlyProductId => Platform.isAndroid
-      ? 'vn.io.codego.noisobiensau.premium_month'
-      : 'vn.io.codego.noisobiensau.premium_monthly';
-
-  static Set<String> get allProductIds => {
-        premiumProductId,
-        'vn.io.codego.noisobiensau.premium_month',
-        'vn.io.codego.noisobiensau.premium_monthly',
-      };
-
+  static const String monthlyProductId =
+      'vn.io.codego.noisobiensau.premium_monthly';
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   bool _isPurchaseLoading = false;
-
-  // Cache ProductDetails fetched from Store
-  ProductDetails? _lifetimeProduct;
-  ProductDetails? _monthlyProduct;
-
-  ProductDetails? get lifetimeProduct => _lifetimeProduct;
-  ProductDetails? get monthlyProduct => _monthlyProduct;
-
-  String get lifetimePriceText => _lifetimeProduct?.price ?? r'$3.99';
-  String get monthlyPriceText => _monthlyProduct?.price ?? r'$0.99';
 
   List<Creature> get creatures => _creatures;
   List<Ocean> get oceans => _oceans;
@@ -78,32 +56,6 @@ class DataService extends ChangeNotifier {
         notifyListeners();
       },
     );
-    // Tự động fetch giá sản phẩm từ Google Play / App Store ngay khi mở app
-    fetchProducts();
-  }
-
-  /// Tải thông tin sản phẩm và giá động từ Google Play / App Store
-  Future<void> fetchProducts() async {
-    try {
-      final bool isAvailable = await _inAppPurchase.isAvailable();
-      if (!isAvailable) return;
-
-      final ProductDetailsResponse response =
-          await _inAppPurchase.queryProductDetails(allProductIds);
-
-      for (final product in response.productDetails) {
-        if (product.id == premiumProductId) {
-          _lifetimeProduct = product;
-        } else if (product.id == monthlyProductId ||
-            product.id == 'vn.io.codego.noisobiensau.premium_month' ||
-            product.id == 'vn.io.codego.noisobiensau.premium_monthly') {
-          _monthlyProduct = product;
-        }
-      }
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error fetching product details: $e');
-    }
   }
 
   @override
@@ -128,9 +80,7 @@ class DataService extends ChangeNotifier {
             purchaseDetails.status == PurchaseStatus.restored) {
           // Kiểm tra loại gói để xác định đây là lifetime hay monthly
           final productId = purchaseDetails.productID;
-          if (productId == monthlyProductId ||
-              productId == 'vn.io.codego.noisobiensau.premium_month' ||
-              productId == 'vn.io.codego.noisobiensau.premium_monthly') {
+          if (productId == monthlyProductId) {
             await unlockMonthlyPremium();
           } else {
             // lifetime hoặc bất kỳ gói nào khác
@@ -148,100 +98,74 @@ class DataService extends ChangeNotifier {
   }
 
   /// Mua gói Trọn đời (Non-consumable)
-  Future<String?> buyPremium() async {
+  Future<void> buyPremium() async {
     try {
       final bool isAvailable = await _inAppPurchase.isAvailable();
       if (!isAvailable) {
-        return 'Cửa hàng thanh toán hiện không khả dụng trên thiết bị này.';
+        return;
       }
 
       _isPurchaseLoading = true;
       notifyListeners();
 
-      ProductDetails? product = _lifetimeProduct;
-      if (product == null) {
-        final ProductDetailsResponse response =
-            await _inAppPurchase.queryProductDetails({premiumProductId});
-        if (response.productDetails.isNotEmpty) {
-          product = response.productDetails.first;
-          _lifetimeProduct = product;
-        }
-      }
-
-      if (product == null) {
+      final ProductDetailsResponse response = await _inAppPurchase
+          .queryProductDetails({premiumProductId});
+      if (response.notFoundIDs.contains(premiumProductId) ||
+          response.productDetails.isEmpty) {
         _isPurchaseLoading = false;
         notifyListeners();
-        return 'Không thể kết nối thông tin gói từ cửa hàng. Vui lòng thử lại sau.';
+        return;
       }
 
+      final ProductDetails productDetails = response.productDetails.first;
       final PurchaseParam purchaseParam = PurchaseParam(
-        productDetails: product,
+        productDetails: productDetails,
       );
       await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
-      return null;
     } catch (e) {
       _isPurchaseLoading = false;
       notifyListeners();
-      return 'Lỗi xử lý thanh toán: $e';
     }
   }
 
   /// Mua gói Hàng tháng (Auto-renewable subscription)
-  Future<String?> buyMonthly() async {
+  Future<void> buyMonthly() async {
     try {
       final bool isAvailable = await _inAppPurchase.isAvailable();
       if (!isAvailable) {
-        return 'Cửa hàng thanh toán hiện không khả dụng trên thiết bị này.';
+        return;
       }
 
       _isPurchaseLoading = true;
       notifyListeners();
 
-      ProductDetails? product = _monthlyProduct;
-      if (product == null) {
-        final ProductDetailsResponse response =
-            await _inAppPurchase.queryProductDetails({
-          monthlyProductId,
-          'vn.io.codego.noisobiensau.premium_month',
-          'vn.io.codego.noisobiensau.premium_monthly',
-        });
-        if (response.productDetails.isNotEmpty) {
-          product = response.productDetails.first;
-          _monthlyProduct = product;
-        }
-      }
-
-      if (product == null) {
+      final ProductDetailsResponse response = await _inAppPurchase
+          .queryProductDetails({monthlyProductId});
+      if (response.notFoundIDs.contains(monthlyProductId) ||
+          response.productDetails.isEmpty) {
         _isPurchaseLoading = false;
         notifyListeners();
-        return 'Không thể kết nối thông tin gói thuê bao từ cửa hàng. Vui lòng thử lại sau.';
+        return;
       }
 
+      final ProductDetails productDetails = response.productDetails.first;
       final PurchaseParam purchaseParam = PurchaseParam(
-        productDetails: product,
+        productDetails: productDetails,
       );
-      // Subscription dùng buyNonConsumable cho iOS & Android
+      // Subscription dùng buyNonConsumable cho iOS, buyConsumable=false
       await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
-      return null;
     } catch (e) {
       _isPurchaseLoading = false;
       notifyListeners();
-      return 'Lỗi xử lý thanh toán: $e';
     }
   }
 
-  Future<String?> restorePurchases() async {
+  Future<void> restorePurchases() async {
     try {
-      final bool isAvailable = await _inAppPurchase.isAvailable();
-      if (!isAvailable) {
-        return 'Cửa hàng thanh toán hiện không khả dụng.';
-      }
       _isPurchaseLoading = true;
       notifyListeners();
       await _inAppPurchase.restorePurchases();
-      return null;
-    } catch (e) {
-      return 'Không thể khôi phục giao dịch: $e';
+    } catch (_) {
     } finally {
       _isPurchaseLoading = false;
       notifyListeners();
@@ -349,7 +273,7 @@ class DataService extends ChangeNotifier {
       _isPremiumMonthly = prefs.getBool('is_premium_monthly') ?? false;
 
       for (var creature in _creatures) {
-        if (_isPremiumUnlocked || _isPremiumMonthly) {
+        if (_isPremiumUnlocked || _isPremiumMonthly || creature.isSubmersible || creature.isShipwreck) {
           creature.isLocked = false;
         } else {
           final isUnlocked = prefs.getBool('unlocked_${creature.id}');
@@ -470,7 +394,9 @@ class DataService extends ChangeNotifier {
     'lagiacrus': (200, 1200),
     'giant_isopod': (300, 2140),
     'oarfish': (450, 1000),
+    'frilled_shark': (550, 1500),
     'reaper_leviathan': (600, 1500),
+    'barreleye_fish': (650, 850),
     'sperm_whale': (750, 3000),
     'giant_squid': (900, 1500),
     'vampire_squid': (1000, 1800),
@@ -479,11 +405,16 @@ class DataService extends ChangeNotifier {
     'greenland_shark': (2200, 3200),
     'ghost_leviathan': (2800, 8000),
     'kraken': (3500, 6000),
+    'wreck_titanic': (3800, 3840),
     'godzilla': (4200, 9000),
+    'sub_alvin': (4500, 6500),
     'sea_serpent': (5000, 8000),
     'the_bloop': (5800, 9000),
     'jormungandr': (7000, 10500),
+    'mariana_snailfish': (8200, 8500),
     'leviathan': (9000, 11000),
+    'sub_deepsea_challenger': (10890, 10908),
+    'sub_trieste': (10911, 10916),
     'cthulhu': (11000, 11000),
   };
 

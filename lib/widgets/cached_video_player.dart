@@ -68,22 +68,37 @@ class _CachedCreatureVideoPlayerState extends State<CachedCreatureVideoPlayer> {
 
   Future<void> _initializeVideo() async {
     try {
+      final cleanUrl = widget.videoUrl.trim();
+      final options = VideoPlayerOptions(mixWithOthers: true);
       VideoPlayerController controller;
-      if (widget.videoUrl.startsWith('assets/')) {
-        controller = VideoPlayerController.asset(widget.videoUrl);
+
+      if (cleanUrl.startsWith('assets/')) {
+        controller = VideoPlayerController.asset(cleanUrl, videoPlayerOptions: options);
+        await controller.initialize();
       } else {
-        // 1. Fetch file from cache manager with a cache-buster query parameter to force refresh updated files
-        final cacheBusterUrl = widget.videoUrl.contains('?')
-            ? '${widget.videoUrl}&cb=1.0.4_v1'
-            : '${widget.videoUrl}?cb=1.0.4_v1';
-        final fileInfo = await DefaultCacheManager().getSingleFile(cacheBusterUrl);
-        controller = VideoPlayerController.file(fileInfo);
+        try {
+          // 1. Tải file qua bộ nhớ đệm với mã phiên bản mới để tránh dính cache lỗi 404 cũ
+          final cacheBusterUrl = cleanUrl.contains('?')
+              ? '$cleanUrl&cb=1.0.5_v2'
+              : '$cleanUrl?cb=1.0.5_v2';
+          final fileInfo = await DefaultCacheManager().getSingleFile(cacheBusterUrl);
+          controller = VideoPlayerController.file(fileInfo, videoPlayerOptions: options);
+          await controller.initialize();
+        } catch (_) {
+          // 2. Fallback phát trực tiếp qua mạng nếu bộ nhớ đệm gặp lỗi
+          controller = VideoPlayerController.networkUrl(
+            Uri.parse(cleanUrl),
+            videoPlayerOptions: options,
+          );
+          await controller.initialize();
+        }
       }
       
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
       
-      // 2. Initialize controller
-      await controller.initialize();
       await controller.setLooping(true);
       await controller.setVolume(0); // Mute sound in the list
       await controller.play();

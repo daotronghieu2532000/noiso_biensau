@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:url_launcher/url_launcher.dart';
 import '../services/locale_service.dart';
 import '../services/sound_service.dart';
 import '../services/data_service.dart';
@@ -261,25 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(width: 8),
                             GestureDetector(
-                              onTap: () async {
-                                final error = await dataService.restorePurchases();
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        error ??
-                                            (isVi
-                                                ? 'Đã kiểm tra khôi phục giao dịch.'
-                                                : 'Purchase restore check completed.'),
-                                      ),
-                                      backgroundColor: error != null
-                                          ? Colors.orangeAccent
-                                          : const Color(0xFF00F0FF),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              },
+                              onTap: () => dataService.restorePurchases(),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
@@ -301,19 +282,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                 ),
                 
-                // Contact HQ (Hỗ trợ bấm mở ứng dụng gửi Email)
+                // Contact HQ
                 _buildSettingRow(
                   icon: Icons.alternate_email_rounded,
                   iconBgColor: const Color(0xFF8E8E93), // Apple Grey
                   title: isVi ? 'Liên hệ HQ' : 'Contact HQ',
-                  onTap: () async {
-                    final emailUri = Uri.parse('mailto:trongh138@gmail.com');
-                    try {
-                      if (await canLaunchUrl(emailUri)) {
-                        await launchUrl(emailUri);
-                      }
-                    } catch (_) {}
-                  },
                   trailing: const Text(
                     'trongh138@gmail.com',
                     style: TextStyle(

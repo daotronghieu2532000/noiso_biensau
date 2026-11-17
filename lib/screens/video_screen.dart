@@ -1323,9 +1323,6 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
   final isVi = strings.languageCode == 'vi';
   int selectedPlan = 0; // 0 = trọn đời, 1 = hàng tháng
 
-  // Kích hoạt nạp giá mới nhất từ Google Play / App Store
-  Provider.of<DataService>(context, listen: false).fetchProducts();
-
   showModalBottomSheet(
     context: context,
     backgroundColor: const Color(0xFF071224),
@@ -1334,14 +1331,12 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (context) {
-      return Consumer<DataService>(
-        builder: (context, ds, _) {
-          return StatefulBuilder(
-            builder: (context, setModalState) {
-              return SingleChildScrollView(
-                child: Container(
-                  padding: const EdgeInsets.only(left: 20, right: 20, top: 24, bottom: 28),
-                  decoration: BoxDecoration(
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              decoration: BoxDecoration(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 border: Border.all(
                   color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
@@ -1530,11 +1525,11 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            ds.lifetimePriceText,
+                            r'$3.99',
                             style: TextStyle(
                               color: selectedPlan == 0 ? const Color(0xFF00F0FF) : Colors.white,
                               fontWeight: FontWeight.w900,
-                              fontSize: 15,
+                              fontSize: 16,
                             ),
                           ),
                         ],
@@ -1602,11 +1597,11 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                ds.monthlyPriceText,
+                                r'$0.99',
                                 style: TextStyle(
                                   color: selectedPlan == 1 ? const Color(0xFF00F0FF) : Colors.white,
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 15,
+                                  fontSize: 16,
                                 ),
                               ),
                               Text(
@@ -1636,27 +1631,10 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
                               ),
                               padding: EdgeInsets.zero,
                             ),
-                            onPressed: ds.isPurchaseLoading
-                                ? null
-                                : () async {
-                                    final error = await ds.restorePurchases();
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            error ??
-                                                (isVi
-                                                    ? 'Đã kiểm tra khôi phục giao dịch.'
-                                                    : 'Purchase restore check completed.'),
-                                          ),
-                                          backgroundColor: error != null
-                                              ? Colors.orangeAccent
-                                              : const Color(0xFF00F0FF),
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
-                                    }
-                                  },
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Provider.of<DataService>(context, listen: false).restorePurchases();
+                            },
                             child: Text(
                               isVi ? 'KHÔI PHỤC' : 'RESTORE',
                               maxLines: 1,
@@ -1686,57 +1664,33 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
                               shadowColor: const Color(0xFF00F0FF).withValues(alpha: 0.3),
                               padding: EdgeInsets.zero,
                             ),
-                            onPressed: ds.isPurchaseLoading
-                                ? null
-                                : () async {
-                                    final error = selectedPlan == 0
-                                        ? await ds.buyPremium()
-                                        : await ds.buyMonthly();
-                                    if (context.mounted) {
-                                      if (error != null) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(error),
-                                            backgroundColor: Colors.redAccent,
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                      } else {
-                                        Navigator.pop(context);
-                                      }
-                                    }
-                                  },
-                            child: ds.isPurchaseLoading
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                    ),
-                                  )
-                                : Text(
-                                    selectedPlan == 0
-                                        ? (isVi
-                                            ? 'TRỌN ĐỜI (${ds.lifetimePriceText})'
-                                            : 'LIFETIME (${ds.lifetimePriceText})')
-                                        : (isVi
-                                            ? 'ĐĂNG KÝ (${ds.monthlyPriceText}/tháng)'
-                                            : 'SUBSCRIBE (${ds.monthlyPriceText}/mo)'),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              final ds = Provider.of<DataService>(context, listen: false);
+                              if (selectedPlan == 0) {
+                                await ds.buyPremium();
+                              } else {
+                                await ds.buyMonthly();
+                              }
+                            },
+                            child: Text(
+                              selectedPlan == 0
+                                  ? (isVi ? 'TRỌN ĐỜI (\$3.99)' : 'LIFETIME (\$3.99)')
+                                  : (isVi ? 'ĐĂNG KÝ (\$0.99/tháng)' : 'SUBSCRIBE (\$0.99/mo)'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // 2 nút chính sách
                   Row(
@@ -1748,12 +1702,8 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
                       ),
                       const SizedBox(width: 8),
                       _buildVipPolicyButton(
-                        label: Platform.isIOS
-                            ? 'Apple EULA'
-                            : (isVi ? 'Điều khoản sử dụng' : 'Terms of Service'),
-                        url: Platform.isIOS
-                            ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'
-                            : 'https://codego.io.vn/privacy_policy.html',
+                        label: 'Apple EULA',
+                        url: 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/',
                       ),
                     ],
                   ),
@@ -1764,8 +1714,6 @@ void showVipUnlockBottomSheet(BuildContext context, {VoidCallback? onPurchaseSuc
           );
         },
       );
-    },
-  );
     },
   );
 }

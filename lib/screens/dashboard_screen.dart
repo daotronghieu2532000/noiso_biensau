@@ -11,6 +11,7 @@ import 'simulator_screen.dart';
 import 'logbook_screen.dart';
 import 'settings_screen.dart';
 import 'leaderboard_screen.dart';
+import 'shark_game_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -210,6 +211,35 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     ),
                   ),
                   const SizedBox(height: 10),
+
+                  // Featured Mini-Game Card: Cá Lớn Nuốt Cá Bé (Shark Apex Hunt)
+                  _buildImageConsoleCard(
+                    context: context,
+                    height: 155,
+                    iconWidget: Image.asset(
+                      'assets/images/creatures/great_white_shark.png',
+                      width: 66,
+                      height: 66,
+                      fit: BoxFit.contain,
+                    ),
+                    title: strings.languageCode == 'vi'
+                        ? 'CÁ LỚN NUỐT CÁ BÉ'
+                        : 'SHARK APEX HUNT',
+                    subtitle: 'LANDSCAPE ARCADE GAME',
+                    status: 'PLAY NOW ',
+                    color: const Color(0xFFFF1744),
+                    details: strings.languageCode == 'vi'
+                        ? 'Điều khiển cá mập săn mồi, đớp cá nhỏ, bật xoáy nước & tiến hóa thành Megalodon'
+                        : 'Steer your shark in landscape mode, devour prey, and evolve into Megalodon',
+                    imageAsset: 'assets/images/creatures/megalodon.png',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SharkGameScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
                   // Asymmetric Staggered Grid of Rich Image Cards
                   _buildStaggeredGrid(context, unlockedCreatures, totalCreatures, bestDepth),

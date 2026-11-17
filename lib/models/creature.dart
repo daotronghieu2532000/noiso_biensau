@@ -88,6 +88,25 @@ class Creature {
   String getSizeHumanRatio(String langCode) => langCode == 'en' ? sizeHumanRatioEn : sizeHumanRatio;
   String getDescription(String langCode) => langCode == 'en' ? descriptionEn : description;
 
+  bool get isReal => type == 'real';
+  bool get isMyth => type == 'myth';
+  bool get isSubmersible => type == 'submersible';
+  bool get isShipwreck => type == 'shipwreck';
+
+  String getCategoryTitle(String langCode) {
+    if (isSubmersible) return langCode == 'en' ? 'DEEP SUBMERSIBLE' : 'TÀU LẶN THÁM HIỂM';
+    if (isShipwreck) return langCode == 'en' ? 'HISTORIC SHIPWRECK' : 'XÁC TÀU LỊCH SỬ';
+    if (isReal) return langCode == 'en' ? 'REAL MARINE LIFE' : 'SINH VẬT THỰC TẾ';
+    return langCode == 'en' ? 'MYTH & TITAN' : 'THẦN THOẠI & VIỄN TƯỞNG';
+  }
+
+  Color get categoryThemeColor {
+    if (isSubmersible) return const Color(0xFFFFB800); // Amber Gold
+    if (isShipwreck) return const Color(0xFF90A4AE);   // Steel Slate
+    if (isReal) return const Color(0xFF00FFB2);        // Emerald Sea Green
+    return const Color(0xFFFF3366);                    // Cyber Red/Magenta
+  }
+
   ImageProvider get imageProvider {
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
       return CachedNetworkImageProvider(imageUrl);
@@ -143,13 +162,45 @@ class Creature {
     }
   }
 
+  static String _normalizeAssetPath(String rawUrl) {
+    const pngConvertedAssets = {
+      'assets/images/creatures/wreck_titanic.jpg': 'assets/images/creatures/wreck_titanic.png',
+      'assets/images/creatures/sub_alvin.jpg': 'assets/images/creatures/sub_alvin.png',
+      'assets/images/creatures/sub_deepsea_challenger.jpg': 'assets/images/creatures/sub_deepsea_challenger.png',
+      'assets/images/creatures/sub_trieste.jpg': 'assets/images/creatures/sub_trieste.png',
+    };
+    return pngConvertedAssets[rawUrl] ?? rawUrl;
+  }
+
+  static String _normalizeVideoUrl(String id, String rawVideoUrl) {
+    const defaultSubAndWreckVideos = {
+      'wreck_titanic': 'https://codego.io.vn/api/uploads/videos/Titanic_shipwreck.mp4',
+      'sub_alvin': 'https://codego.io.vn/api/uploads/videos/Submersible_collecting.mp4',
+      'sub_deepsea_challenger': 'https://codego.io.vn/api/uploads/videos/Submersible_descending.mp4',
+      'sub_trieste': 'https://codego.io.vn/api/uploads/videos/Bathyscaphe_descending.mp4',
+    };
+    final trimmed = rawVideoUrl.trim();
+    if (defaultSubAndWreckVideos.containsKey(id)) {
+      if (trimmed.isEmpty || trimmed.contains('/uploads/creatures/')) {
+        return defaultSubAndWreckVideos[id]!;
+      }
+    }
+    return trimmed;
+  }
+
   factory Creature.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String;
+    final type = json['type'] as String;
+    final rawLocked = json['is_locked'] as bool? ?? false;
+    // Mở khóa mặc định cho các tàu lặn (submersible) và xác tàu (shipwreck) để hiển thị ảnh & video trực tiếp
+    final isSubOrWreck = type == 'submersible' || type == 'shipwreck';
+
     return Creature(
-      id: json['id'] as String,
+      id: id,
       name: json['name'] as String,
       nameEn: json['name_en'] as String? ?? json['name'] as String,
       scientificName: json['scientific_name'] as String,
-      type: json['type'] as String,
+      type: type,
       minDepth: json['min_depth'] as int,
       maxDepth: json['max_depth'] as int,
       dangerLevel: json['danger_level'] as int,
@@ -157,12 +208,12 @@ class Creature {
       sizeHumanRatioEn: json['size_human_ratio_en'] as String? ?? json['size_human_ratio'] as String,
       humanSizeMeters: (json['human_size_meters'] as num).toDouble(),
       creatureSizeMeters: (json['creature_size_meters'] as num).toDouble(),
-      imageUrl: json['image_url'] as String,
-      videoUrl: json['video_url'] as String? ?? '',
+      imageUrl: _normalizeAssetPath(json['image_url'] as String),
+      videoUrl: _normalizeVideoUrl(id, json['video_url'] as String? ?? ''),
       ambientSound: json['ambient_sound'] as String,
       description: json['description'] as String,
       descriptionEn: json['description_en'] as String? ?? json['description'] as String,
-      isLocked: json['is_locked'] as bool? ?? false,
+      isLocked: isSubOrWreck ? false : rawLocked,
     );
   }
 
